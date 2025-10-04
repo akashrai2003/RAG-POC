@@ -1,0 +1,32 @@
+# Core dependencies
+streamlit
+pandas
+numpy
+openpyxl
+
+# Database and vector storage
+# sqlite3 is built-in, no need to install
+chromadb
+sqlalchemy
+
+# LLM and ML
+google-generativeai
+langchain
+langchain-google-genai
+langgraph
+langchain-community
+sentence-transformers
+
+# Utilities
+python-dotenv
+pydantic
+pydantic-settings
+typing-extensions
+
+# Development and testing
+pytest
+black
+flake8
+
+# Logging
+loguru
