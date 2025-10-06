@@ -28,6 +28,13 @@ class SQLService:
     def _init_database(self):
         """Initialize the SQLite database with asset table."""
         try:
+            # Ensure directory exists before creating database
+            import os
+            db_dir = os.path.dirname(self.db_path)
+            if db_dir and not os.path.exists(db_dir):
+                os.makedirs(db_dir, exist_ok=True)
+                print(f"✅ Created database directory: {db_dir}")
+            
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
