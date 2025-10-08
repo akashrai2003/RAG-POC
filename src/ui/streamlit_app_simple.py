@@ -91,16 +91,13 @@ class SimpleAssetRAGInterface:
         """Main application runner."""
         # Simple header
         st.title("RAG PoC")
-        st.caption("Natural language assistant for your data")
+        st.caption("Natural language assistant for Einstein Data Cloud")
         
-        # Two tabs: Query and Upload
-        tab1, tab2 = st.tabs(["Query", "Upload Data"])
+        # Info banner about Einstein Analytics
+        st.info("🔗 Connected to Salesforce Einstein Data Cloud - querying live data directly!")
         
-        with tab1:
-            self.render_query_interface()
-        
-        with tab2:
-            self.render_upload_interface()
+        # Single tab: Query only (upload managed in Salesforce)
+        self.render_query_interface()
     
     def render_query_interface(self):
         """Render the query interface."""
