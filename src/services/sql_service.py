@@ -45,8 +45,9 @@ class SQLService:
             'battery_voltage': 'Battery_Voltage__c',
             'cardinal_tag': 'Cardinal_Tag__c',
             'current_location': 'Current_Location_Name__c',
+            'created date': 'CreatedDate',
             'date_shipped': 'Date_Shipped__c',
-            'est_battery_calculate': 'Est_Battery_Calculate__c',
+            'est_batterycalculate': 'est_Batterycalculate__c',
             'last_connected': 'Last_Connected__c',
             'power_reset_occurred': 'Power_Reset_Occurred__c',
             'power_reset_time': 'Power_Reset_Time__c',
@@ -140,6 +141,8 @@ class SQLService:
         
         Dataset Information:
         {schema_info}
+
+        Schema Info : {self.field_mapping}
         
         User Request: {query_description}
         
@@ -153,24 +156,8 @@ class SQLService:
            - Use 'q = limit q' for limiting results
            - Use 'q = foreach q generate' for SELECT projections
         
-        2. **Exact Salesforce Field Names** (case-sensitive with __c suffix):
-           - Asset_ID__c (NOT asset_id)
-           - Account_Name__c (NOT account_name)
-           - Action_Needed__c
-           - Battery_Voltage__c (NOT battery_voltage)
-           - Cardinal_Tag__c
-           - Current_Location_Name__c (NOT current_location)
-           - Date_Shipped__c
-           - Est_Battery_Calculate__c
-           - Last_Connected__c
-           - Power_Reset_Occurred__c
-           - Power_Reset_Time__c
-           - Powerup_Time__c
-           - Product_Name__c (NOT product_name)
-           - State_of_Pallet__c (NOT state_of_pallet)
-           - Account_Address__c
         
-        3. **User term mapping:**
+        2. **User term mapping:**
            - "state" or "status" → State_of_Pallet__c
            - "location" → Current_Location_Name__c
            - "voltage" → Battery_Voltage__c
@@ -178,7 +165,7 @@ class SQLService:
            - "account" → Account_Name__c
            - "id" → Asset_ID__c
         
-        4. **SAQL Operators:**
+        3. **SAQL Operators:**
            - String equality: == (not =)
            - String literals: Use DOUBLE quotes "value" (NOT single quotes 'value')
            - String pattern: matches "*pattern*"
@@ -187,7 +174,7 @@ class SQLService:
            - Boolean values: true, false (lowercase)
            - CRITICAL: String comparisons MUST use double quotes: State_of_Pallet__c == "In Network"
         
-        5. **Aggregations:**
+        4. **Aggregations:**
            - count() - counts ALL records (no field argument)
            - sum(field) - sum of numeric field
            - avg(field) - average of numeric field
@@ -196,13 +183,13 @@ class SQLService:
            - To count records, use: q = foreach q generate count() as 'Count';
            - To count with grouping: q = group q by Field__c; q = foreach q generate Field__c, count() as 'Count';
         
-        6. **CRITICAL Query Statement Order:**
+        5. **CRITICAL Query Statement Order:**
            - LIMIT must come AFTER FOREACH, never before
            - Correct order: load → filter → foreach → limit
            - When filtering data: ALWAYS use foreach before limit
            - Pattern: q = load → q = filter → q = foreach q generate → q = limit
         
-        7. **Best Practices:**
+        6. **Best Practices:**
            - Always add limit at the END after foreach (limit 100 unless user specifies different)
            - Use single quotes for string literals
            - For filtered queries, MUST use foreach before limit
@@ -216,20 +203,11 @@ class SQLService:
         Query: "count all assets"
         SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate count() as 'Total_Count';
         
-        Query: "count of Asset_ID__c"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate count() as 'Total_Count';
-        
         Query: "assets with battery voltage less than 6"
         SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = filter q by Battery_Voltage__c < 6; q = foreach q generate Asset_ID__c, Battery_Voltage__c, Product_Name__c, State_of_Pallet__c; q = limit q 100;
         
         Query: "count assets by state"
         SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = group q by State_of_Pallet__c; q = foreach q generate State_of_Pallet__c, count() as 'Count';
-        
-        Query: "count by product"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = group q by Product_Name__c; q = foreach q generate Product_Name__c, count() as 'Count';
-        
-        Query: "show all assets"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = limit q 100;
         
         Query: "average voltage by product"
         SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = group q by Product_Name__c; q = foreach q generate Product_Name__c, avg(Battery_Voltage__c) as 'Avg_Voltage';
@@ -251,6 +229,12 @@ class SQLService:
         
         Query: "assets with product AT3 Pilot"
         SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = filter q by Product_Name__c == "AT3 Pilot"; q = foreach q generate Asset_ID__c, Product_Name__c, Battery_Voltage__c; q = limit q 100;
+        
+        Query: "Sum of battery voltage for assets"
+        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate 'Asset_ID__c', 'Battery_Voltage__c'; result = group q by 'Asset_ID__c'; result = foreach result generate sum(q.'Battery_Voltage__c') as total_voltage;
+
+        Query: "Show the Assets where Last Scan Date - Last Connected is less than 30 days"
+        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate q.Name as Asset, date_diff( \"day\", toDate(substr(Last_Connected__c, 1, 23) + \"Z\", \"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'\"), toDate(substr(Date_Shipped__c, 1, 23) + \"Z\", \"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'\")) as Days_Diff; q = filter q by Days_Diff < 30;"
         
         Now generate SAQL for: {query_description}
         
