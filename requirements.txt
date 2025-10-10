@@ -9,10 +9,13 @@ openpyxl
 chromadb
 sqlalchemy
 
+# Salesforce Einstein Data Cloud
+requests
+
 # LLM and ML
-google-generativeai
+openai
 langchain
-langchain-google-genai
+langchain-openai
 langgraph
 langchain-community
 sentence-transformers
