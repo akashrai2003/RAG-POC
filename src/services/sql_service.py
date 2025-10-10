@@ -8,7 +8,7 @@ import requests
 import json
 import re
 from typing import Dict, List, Any, Optional
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 
 from config.settings import config, QueryConfig
 
@@ -31,9 +31,9 @@ class SQLService:
         self._access_token = None
         
         # Initialize LLM for SAQL generation
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=config.google_api_key,
+        self.llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            openai_api_key=config.openai_api_key,
             temperature=QueryConfig.SQL_GENERATION_TEMPERATURE
         )
         
@@ -98,7 +98,7 @@ class SQLService:
             schema_info = self._get_schema_info()
             
             # Generate SAQL query using LLM
-            print(f"🤖 Generating SAQL query using Gemini...")
+            print(f"🤖 Generating SAQL query using OpenAI...")
             saql_query = self._generate_saql_query(query_description, schema_info)
 
             if not saql_query:

@@ -4,7 +4,7 @@ Fast, single-pass execution with parallel tool calls.
 """
 
 from typing import Dict, List, Any, Optional
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 import json
 import time
 import asyncio
@@ -24,9 +24,9 @@ class ParallelAssetRAGAgent:
         self.rag_service = rag_service
         
         # Initialize LLM
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=config.google_api_key,
+        self.llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            openai_api_key=config.openai_api_key,
             temperature=QueryConfig.AGENT_TEMPERATURE
         )
     
@@ -44,7 +44,7 @@ class ParallelAssetRAGAgent:
             print(f"{'='*80}")
             print(f"🧠 STEP 1: Query Analysis")
             print(f"{'='*80}")
-            print(f"🤖 Asking Gemini to analyze query and decide tools...")
+            print(f"🤖 Asking OpenAI to analyze query and decide tools...")
             
             tool_decision = await self._analyze_query(query_request.query)
             

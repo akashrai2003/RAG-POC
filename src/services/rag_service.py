@@ -6,6 +6,7 @@ import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from typing import Dict, List, Any, Optional
 import json
@@ -21,9 +22,9 @@ class RAGService:
     def __init__(self, chroma_path: str = None):
         self.chroma_path = chroma_path or config.chroma_db_path
         self.embedding_model = SentenceTransformer(DatabaseConfig.EMBEDDING_MODEL)
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=config.google_api_key,
+        self.llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            openai_api_key=config.openai_api_key,
             temperature=QueryConfig.RAG_RESPONSE_TEMPERATURE
         )
         
@@ -177,7 +178,7 @@ class RAGService:
             context = self._build_context(context_docs, metadatas, distances)
             
             # Generate response using LLM
-            print(f"🤖 Generating response using Gemini with context...")
+            print(f"🤖 Generating response using OpenAI with context...")
             response = self._generate_rag_response(question, context)
             
             # Calculate confidence score
