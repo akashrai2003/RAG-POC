@@ -19,9 +19,9 @@ class AppConfig(BaseSettings):
     app_name: str = Field(default="Asset RAG POC")
     app_version: str = Field(default="1.0.0")
     debug: bool = Field(default=True)
-    
-    # Google Gemini API
-    google_api_key: str = Field(default="")
+
+    # OpenAI API
+    openai_api_key: str = Field(default="")
     
     # Database Configuration
     sqlite_db_path: str = Field(default="data/db/assets.db")
