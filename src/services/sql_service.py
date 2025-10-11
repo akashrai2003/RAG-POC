@@ -135,111 +135,55 @@ class SQLService:
             }
     
     def _generate_saql_query(self, query_description: str, schema_info: str) -> Optional[str]:
-        """Generate SQL query from natural language description."""
-        prompt = f"""
-        You are an expert SAQL (Salesforce Analytics Query Language) generator for Einstein Data Cloud.
-        
-        Dataset Information:
-        {schema_info}
+        """Generate SAQL query from natural language description."""
+        prompt = f"""You are a SAQL expert. Generate ONLY the SAQL query string, no explanations or markdown.
 
-        Schema Info : {self.field_mapping}
-        
-        User Request: {query_description}
-        
-        CRITICAL RULES for SAQL:
-        
-        1. **SAQL Syntax** (NOT SQL):
-           - Always start with: q = load "{self.dataset_id}/{self.dataset_version}";
-           - Use 'q = filter q by' for WHERE conditions
-           - Use 'q = group q by' for GROUP BY operations
-           - Use 'q = order q by' for ORDER BY
-           - Use 'q = limit q' for limiting results
-           - Use 'q = foreach q generate' for SELECT projections
-        
-        
-        2. **User term mapping:**
-           - "state" or "status" → State_of_Pallet__c
-           - "location" → Current_Location_Name__c
-           - "voltage" → Battery_Voltage__c
-           - "product" → Product_Name__c
-           - "account" → Account_Name__c
-           - "id" → Asset_ID__c
-        
-        3. **SAQL Operators:**
-           - String equality: == (not =)
-           - String literals: Use DOUBLE quotes "value" (NOT single quotes 'value')
-           - String pattern: matches "*pattern*"
-           - Numerical: <, >, <=, >=, ==, !=
-           - Logical: && (AND), || (OR), ! (NOT)
-           - Boolean values: true, false (lowercase)
-           - CRITICAL: String comparisons MUST use double quotes: State_of_Pallet__c == "In Network"
-        
-        4. **Aggregations:**
-           - count() - counts ALL records (no field argument)
-           - sum(field) - sum of numeric field
-           - avg(field) - average of numeric field
-           - min(field), max(field) - min/max of field
-           - IMPORTANT: count() takes NO arguments, it counts rows
-           - To count records, use: q = foreach q generate count() as 'Count';
-           - To count with grouping: q = group q by Field__c; q = foreach q generate Field__c, count() as 'Count';
-        
-        5. **CRITICAL Query Statement Order:**
-           - LIMIT must come AFTER FOREACH, never before
-           - Correct order: load → filter → foreach → limit
-           - When filtering data: ALWAYS use foreach before limit
-           - Pattern: q = load → q = filter → q = foreach q generate → q = limit
-        
-        6. **Best Practices:**
-           - Always add limit at the END after foreach (limit 100 unless user specifies different)
-           - Use single quotes for string literals
-           - For filtered queries, MUST use foreach before limit
-           - When selecting all fields, use 'q = foreach q generate' with field names or use load → limit (no filter)
-           - Use DOUBLE quotes for string literals: "In Network", "Active", etc.
-           - Use single quotes ONLY for aliases: count() as 'Total_Count'
-        Return ONLY the SAQL query string, no explanations, no markdown, no JSON.
-        
-        Examples:
-        
-        Query: "count all assets"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate count() as 'Total_Count';
-        
-        Query: "assets with battery voltage less than 6"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = filter q by Battery_Voltage__c < 6; q = foreach q generate Asset_ID__c, Battery_Voltage__c, Product_Name__c, State_of_Pallet__c; q = limit q 100;
-        
-        Query: "count assets by state"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = group q by State_of_Pallet__c; q = foreach q generate State_of_Pallet__c, count() as 'Count';
-        
-        Query: "average voltage by product"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = group q by Product_Name__c; q = foreach q generate Product_Name__c, avg(Battery_Voltage__c) as 'Avg_Voltage';
-        
-        Query: "assets not connected in last 7 days"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate Asset_ID__c, Last_Connected__c, date_diff("day", toDate(Last_Connected__c), now()) as 'Days_Since_Connected'; q = filter q by 'Days_Since_Connected' > 7; q = limit q 100;
-        
-        Query: "days since shipment for each asset"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate Asset_ID__c, Product_Name__c, Date_Shipped__c, date_diff("day", toDate(Date_Shipped__c), now()) as 'Days_Since_Shipped'; q = limit q 100;
-        
-        Query: "assets with low voltage in California"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = filter q by Battery_Voltage__c < 6 && Current_Location_Name__c matches "*California*"; q = foreach q generate Asset_ID__c, Battery_Voltage__c, Current_Location_Name__c; q = limit q 100;
-        
-        Query: "assets with state In Network"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = filter q by State_of_Pallet__c == "In Network"; q = foreach q generate Asset_ID__c, State_of_Pallet__c, Product_Name__c; q = limit q 100;
-        
-        Query: "count assets in state In Network"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = filter q by State_of_Pallet__c == "In Network"; q = foreach q generate count() as 'Count';
-        
-        Query: "assets with product AT3 Pilot"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = filter q by Product_Name__c == "AT3 Pilot"; q = foreach q generate Asset_ID__c, Product_Name__c, Battery_Voltage__c; q = limit q 100;
-        
-        Query: "Sum of battery voltage for assets"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate 'Asset_ID__c', 'Battery_Voltage__c'; result = group q by 'Asset_ID__c'; result = foreach result generate sum(q.'Battery_Voltage__c') as total_voltage;
+Dataset: {self.dataset_id}/{self.dataset_version}
+{schema_info}
 
-        Query: "Show the Assets where Last Scan Date - Last Connected is less than 30 days"
-        SAQL: q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate q.Name as Asset, date_diff( \"day\", toDate(substr(Last_Connected__c, 1, 23) + \"Z\", \"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'\"), toDate(substr(Date_Shipped__c, 1, 23) + \"Z\", \"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'\")) as Days_Diff; q = filter q by Days_Diff < 30;"
-        
-        Now generate SAQL for: {query_description}
-        
-        SAQL Query:
-        """
+Field Mappings:
+battery/voltage→Battery_Voltage__c, state/status→State_of_Pallet__c, location→Current_Location_Name__c, product→Product_Name__c, account→Account_Name__c, asset_id→Asset_ID__c, last_connected→Last_Connected__c, date_shipped→Date_Shipped__c
+
+WARNING: Last_Scan_Date_ST__c has inconsistent format (12-hour AM/PM) - AVOID using in date calculations
+
+SAQL Rules:
+- Structure: load→filter→foreach→limit (LIMIT AFTER FOREACH)
+- String equality: ==, pattern: matches "*text*"
+- Strings: DOUBLE quotes "value", Aliases: SINGLE quotes 'alias'
+- Aggregations: count(), sum(field), avg(field), min(field), max(field)
+
+Date Handling (CRITICAL):
+- ONLY use: Last_Connected__c, Date_Shipped__c, CreatedDate (ISO format compatible)
+- DO NOT use: Last_Scan_Date_ST__c (incompatible format)
+- Pattern: substr(field, 1, 23) + "Z" then parse with "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+- Full: toDate(substr(field, 1, 23) + "Z", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+- date_diff("day", from_date, to_date) = to_date - from_date
+
+Examples:
+
+count all assets
+q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate count() as 'Total';
+
+assets with battery voltage less than 6
+q = load "{self.dataset_id}/{self.dataset_version}"; q = filter q by Battery_Voltage__c < 6; q = foreach q generate Asset_ID__c, Battery_Voltage__c, Product_Name__c; q = limit q 100;
+
+count assets by state
+q = load "{self.dataset_id}/{self.dataset_version}"; q = group q by State_of_Pallet__c; q = foreach q generate State_of_Pallet__c, count() as 'Count';
+
+assets not connected in last 7 days
+q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate Asset_ID__c, Last_Connected__c, date_diff("day", toDate(substr(Last_Connected__c, 1, 23) + "Z", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"), now()) as 'Days_Since'; q = filter q by 'Days_Since' > 7; q = limit q 100;
+
+assets where Date Shipped minus Last Connected is less than 30 days
+q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate Asset_ID__c, Date_Shipped__c, Last_Connected__c, date_diff("day", toDate(substr(Last_Connected__c, 1, 23) + "Z", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"), toDate(substr(Date_Shipped__c, 1, 23) + "Z", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")) as 'Days_Diff'; q = filter q by 'Days_Diff' < 30; q = limit q 100;
+
+days since shipment
+q = load "{self.dataset_id}/{self.dataset_version}"; q = foreach q generate Asset_ID__c, Date_Shipped__c, date_diff("day", toDate(substr(Date_Shipped__c, 1, 23) + "Z", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"), now()) as 'Days_Since_Shipped'; q = limit q 100;
+
+assets in state In Network
+q = load "{self.dataset_id}/{self.dataset_version}"; q = filter q by State_of_Pallet__c == "In Network"; q = foreach q generate Asset_ID__c, State_of_Pallet__c; q = limit q 100;
+
+Query: {query_description}
+SAQL:"""
         
         try:
             response = self.llm.invoke(prompt)
@@ -256,7 +200,7 @@ class SQLService:
             return saql_query
             
         except Exception as e:
-            print(f"Error generating SQL query: {e}")
+            print(f"Error generating SAQL query: {e}")
             return None
 
     def _query_saql(self, saql_query: str) -> Dict[str, Any]:
@@ -325,20 +269,51 @@ class SQLService:
             
 
     def _get_schema_info(self) -> str:
-        """Get database schema information."""
+        """Get database schema information - concise version."""
         try:
-            schema_info += f"\nDataset ID: {self.dataset_id}\n"
-            sample_saql = f'q = load "{self.dataset_id}/{self.dataset_version}"; q = limit q 3;'
-            results = self._query_saql(sample_saql)
-            if results and isinstance(results, list) and len(results) > 0:
-                sample_record = results[0]
-                schema_info += "Sample Record Fields:\n"
-                for field in sample_record.keys():
-                    schema_info += f"- {field}\n"
-                return schema_info
+            # Try to get dataset metadata from REST API (most reliable)
+            access_token = self._get_access_token_cached()
+            if access_token:
+                metadata_url = f"{self.salesforce_url}/services/data/v53.0/wave/datasets/{self.dataset_id}"
+                headers = {
+                    'Authorization': f'Bearer {access_token}',
+                    'Content-Type': 'application/json'
+                }
+                response = requests.get(metadata_url, headers=headers, timeout=30)
+                
+                if response.status_code == 200:
+                    dataset_info = response.json()
+                    
+                    # Try to get fields from dataset metadata
+                    if 'fields' in dataset_info:
+                        field_names = [field['name'] for field in dataset_info['fields']]
+                        return "Available Fields: " + ", ".join(sorted(field_names))
+                    
+                    # Alternative: Get XMD metadata for fields
+                    version_url = f"{self.salesforce_url}/services/data/v53.0/wave/datasets/{self.dataset_id}/versions/{self.dataset_version}"
+                    version_response = requests.get(version_url, headers=headers, timeout=30)
+                    
+                    if version_response.status_code == 200:
+                        version_data = version_response.json()
+                        field_names = []
+                        
+                        if 'xmdMain' in version_data:
+                            xmd = version_data['xmdMain']
+                            if 'dimensions' in xmd:
+                                field_names.extend([dim['field'] for dim in xmd['dimensions']])
+                            if 'measures' in xmd:
+                                field_names.extend([measure['field'] for measure in xmd['measures']])
+                        
+                        if field_names:
+                            return "Available Fields: " + ", ".join(sorted(field_names))
+            
+            # Fallback: Return common field mappings we know about
+            return "Available Fields: " + ", ".join(sorted(self.field_mapping.values()))
                 
         except Exception as e:
-            return f"Could not retrieve schema: {str(e)}"
+            print(f"Schema retrieval error: {str(e)}")
+            # Last resort: return known fields
+            return "Available Fields: " + ", ".join(sorted(self.field_mapping.values()))
     
     # def get_database_stats(self) -> Dict[str, Any]:
     #     """Get database statistics."""
