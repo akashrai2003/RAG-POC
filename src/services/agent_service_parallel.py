@@ -259,8 +259,8 @@ Respond with ONLY the JSON object, no other text.
 SQL Query Results:
 - SQL Query: {sql_query}
 - Rows returned: {len(sql_data)}
-- Data: {json.dumps(sql_data[:5], indent=2, default=str)}
-{"(showing first 5 of " + str(len(sql_data)) + " rows)" if len(sql_data) > 5 else ""}
+- Data: {json.dumps(sql_data[:50], indent=0, default=str)}
+{"(showing first 50 of " + str(len(sql_data)) + " rows)" if len(sql_data) > 50 else ""}
 """)
             else:
                 # SQL query failed

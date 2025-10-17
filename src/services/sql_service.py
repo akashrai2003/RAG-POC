@@ -40,21 +40,143 @@ class SQLService:
         # Field mapping: friendly names -> Salesforce names
         self.field_mapping = {
             'asset_id': 'Asset_ID__c',
+            'account_cus_id': 'Account_Cus_ID__c',
             'account_name': 'Account_Name__c',
+            'account_to_update': 'Account_to_Update__c',
+            'account_unique_id': 'Account_Unique_Id__c',
+            'account_id': 'AccountId',
+            'accuracy_meters': 'Accuracy_meters__c',
             'action_needed': 'Action_Needed__c',
+            'action_needed_e1': 'Action_Needed_E1__c',
+            'action_needed_from_e1': 'Action_Needed_From_E1__c',
+            'altitude': 'Altitude__c',
+            'asset_name': 'Asset_Name_formula__c',
+            'asset_name_url': 'Asset_Name_URL__c',
+            'asset_level': 'AssetLevel',
+            'asset_provided_by': 'AssetProvidedById',
+            'asset_serviced_by': 'AssetServicedById',
+            'assigned_railway_contact_number': 'Assigned_Railway_Contact_Number__c',
+            'assigned_railway_line': 'Assigned_Railway_Line__c',
+            'async': 'async__c',
+            'back_replaced_date': 'Back_Replaced_Date__c',
+            'battery_check': 'Battery_check__c',
+            'battery_replaced_date': 'Battery_Replaced_Date__c',
             'battery_voltage': 'Battery_Voltage__c',
+            'business_location': 'Business_Location__c',
+            'business_location_latitude': 'Business_Location__Latitude__s',
+            'business_location_longitude': 'Business_Location__Longitude__s',
+            'business_name': 'Business_Name__c',
+            'business_name_link': 'Business_Name_link__c',
+            'business_place_id': 'Business_Place_Id__c',
+            'c_field': 'c__c',
+            'capture_distance_records': 'Capture_Distance_Records__c',
+            'capture_movement_event': 'Capture_Movement_Event__c',
+            'capture_temperature_response': 'Capture_Temperature_Response__c',
+            'capturing_response': 'Capturing_Response__c',
             'cardinal_tag': 'Cardinal_Tag__c',
+            'checklane': 'CheckLane__c',
+            'city': 'City',
+            'config_change': 'Config_Change__c',
+            'config_check_reported': 'Config_Check_Reported__c',
+            'contact_id': 'ContactId',
+            'country': 'Country',
+            'created_by_id': 'CreatedById',
+            'created_date': 'CreatedDate',
+            'current_address': 'Current_Address__c',
+            'current_city': 'Current_City__c',
+            'current_country': 'Current_Country__c',
+            'current_loc_assets_count': 'Current_Loc_Assets_count__c',
+            'current_loc_latitude': 'Current_Loc_latitude__c',
+            'current_loc_longitude': 'Current_Loc_Longitude__c',
             'current_location': 'Current_Location_Name__c',
-            'created date': 'CreatedDate',
+            'current_location_address': 'Current_Location_Address__c',
+            'current_location_report': 'Current_Location_Report__c',
+            'current_location_unique_id': 'Current_Location_Unique_Id__c',
+            'current_railway_line': 'Current_Railway_Line__c',
+            'current_state': 'Current_State__c',
+            'current_state2': 'Current_State2__c',
+            'current_street_address': 'Current_Street_Address__c',
+            'current_weight': 'Current_Weight__c',
+            'current_zip_code': 'Current_Zip_Code__c',
+            'custom_check_1': 'custom_check_1__c',
+            'custom_check_2': 'custom_check_2__c',
+            'customer_id_check': 'Customer_ID_Check__c',
             'date_shipped': 'Date_Shipped__c',
+            'deleted_ahc': 'Deleted_AHC__c',
+            'description': 'Description',
+            'device_id': 'Device_Id__c',
+            'digital_asset_status': 'DigitalAssetStatus',
+            'distance': 'Distance__c',
+            'distance_datetime': 'Distance_Datetime__c',
+            'distance_level': 'Distance_Level__c',
+            'dormant_days': 'Dormant_Days__c',
             'est_batterycalculate': 'est_Batterycalculate__c',
+            'est_batt_pct': 'estBattPct__c',
+            'event_name': 'eventName__c',
+            'expected_delivery': 'Expected_Delivery__c',
+            'facility_location': 'Facility_Location__c',
+            'field1': 'Field1__c',
+            'field2': 'Field2__c',
+            'geocode_accuracy': 'GeocodeAccuracy',
+            'humidity': 'Humidity__c',
+            'iccid': 'ICCID__c',
+            'id': 'Id',
+            'imei': 'IMEI__c',
+            'install_date': 'InstallDate',
+            'is_access_point': 'Is_Access_Point__c',
+            'is_asset_following_assigned_railway_line': 'Is_Asset_Following_Assigned_Railway_Line__c',
+            'is_loco_asset': 'Is_Loco_Asset__c',
+            'is_nimbe_link_asset': 'Is_NimbeLink_Asset__c',
+            'ischanged_true': 'IschangedTrue__c',
+            'is_competitor_product': 'IsCompetitorProduct',
+            'is_deleted': 'IsDeleted',
+            'is_internal': 'IsInternal',
+            'is_new_asset': 'isNew_Asset__c',
+            'label_replaced_date': 'Label_Replaced_Date__c',
             'last_connected': 'Last_Connected__c',
+            'last_connected_map': 'Last_Connected_Map__c',
+            'last_scan_date': 'Last_Scan_Date_ST__c',
+            'last_synced_timestamp': 'Last_Synced_Timestamp__c',
+            'latitude': 'Latitude',
+            'longitude': 'Longitude',
+            'manufacture_date': 'Manufacture_Date__c',
+            'manufacturer': 'Manufacturer__c',
+            'movement': 'Movement__c',
+            'movement_end': 'Movement_End__c',
+            'name': 'Name',
+            'order_number': 'Order_Number__c',
+            'order_status': 'Order_Status__c',
+            'order_type': 'Order_Type__c',
+            'owner_id': 'OwnerId',
+            'pallet_type': 'Pallet_Type__c',
+            'pause_job': 'Pause_Job__c',
+            'plant_name': 'PlantName__c',
+            'postal_code': 'PostalCode',
             'power_reset_occurred': 'Power_Reset_Occurred__c',
             'power_reset_time': 'Power_Reset_Time__c',
-            'powerup_time': 'Powerup_Time__c',
+            'powerup_time': 'PowerUp_Time__c',
+            'price': 'Price',
             'product_name': 'Product_Name__c',
+            'product_code': 'Product_Code_2__c',
+            'product_description': 'Product_Description__c',
+            'quantity': 'Quantity',
+            'rack_type': 'Rack_Type__c',
+            'railway_contact_number': 'Railway_Contact_Number__c',
+            'rssi': 'rssi__c',
+            'serial_number': 'SerialNumber',
+            'ship_to_customer_name': 'Ship_To_Customer_Name__c',
             'state_of_pallet': 'State_of_Pallet__c',
-            'account_address': 'Account_Address__c'
+            'status': 'Status',
+            'still_in_location_count': 'Still_in_Location_Count__c',
+            'street': 'Street',
+            'system_modstamp': 'SystemModstamp',
+            'tag_destroyed_date': 'Tag_Destroyed_Date__c',
+            'temperature': 'Temperature__c',
+            'total_dwell_days': 'Total_Dwell_Days__c',
+            'total_dwell_days_cl': 'Total_Dwell_Days_CL__c',
+            'track_full_history': 'Track_Full_History__c',
+            'account_address': 'Account_Address__c',
+            'last_scan_date_alias': 'Date_Shipped__c'
         }
         
         print(f"Einstein Analytics Service initialized")
@@ -190,6 +312,7 @@ class SQLService:
            - Pattern: q = load → q = filter → q = foreach q generate → q = limit
         
         6. **Best Practices:**
+           - While using toDate function in saql use the formatting substr(Field name, 1, 23) + \"Z\", \"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'\"
            - Always add limit at the END after foreach (limit 100 unless user specifies different)
            - Use single quotes for string literals
            - For filtered queries, MUST use foreach before limit
@@ -339,53 +462,3 @@ class SQLService:
                 
         except Exception as e:
             return f"Could not retrieve schema: {str(e)}"
-    
-    # def get_database_stats(self) -> Dict[str, Any]:
-    #     """Get database statistics."""
-    #     try:
-    #         with sqlite3.connect(self.db_path) as conn:
-    #             cursor = conn.cursor()
-                
-    #             # Total records
-    #             cursor.execute("SELECT COUNT(*) FROM assets")
-    #             total_records = cursor.fetchone()[0]
-                
-    #             # Records by state
-    #             cursor.execute("""
-    #                 SELECT state_of_pallet, COUNT(*) as count 
-    #                 FROM assets 
-    #                 WHERE state_of_pallet IS NOT NULL 
-    #                 GROUP BY state_of_pallet
-    #             """)
-    #             state_distribution = dict(cursor.fetchall())
-                
-    #             # Battery voltage stats
-    #             cursor.execute("""
-    #                 SELECT 
-    #                     COUNT(*) as count,
-    #                     AVG(battery_voltage) as avg_voltage,
-    #                     MIN(battery_voltage) as min_voltage,
-    #                     MAX(battery_voltage) as max_voltage
-    #                 FROM assets 
-    #                 WHERE battery_voltage IS NOT NULL
-    #             """)
-    #             voltage_stats = dict(cursor.fetchone())
-                
-    #             # Product distribution
-    #             cursor.execute("""
-    #                 SELECT product_name, COUNT(*) as count 
-    #                 FROM assets 
-    #                 WHERE product_name IS NOT NULL 
-    #                 GROUP BY product_name
-    #             """)
-    #             product_distribution = dict(cursor.fetchall())
-                
-    #             return {
-    #                 'total_records': total_records,
-    #                 'state_distribution': state_distribution,
-    #                 'voltage_stats': voltage_stats,
-    #                 'product_distribution': product_distribution
-    #             }
-                
-    #     except Exception as e:
-    #         return {'error': str(e)}
