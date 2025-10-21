@@ -1,5 +1,5 @@
 """
-RAG service for semantic search and contextual responses.
+PDF-based RAG service for semantic search and contextual responses.
 """
 
 import chromadb
@@ -8,34 +8,38 @@ from sentence_transformers import SentenceTransformer
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader, UnstructuredPDFLoader
+from langchain_community.document_loaders import Docx2txtLoader
 from typing import Dict, List, Any, Optional
 import json
 import os
+from pathlib import Path
 
 from config.settings import config, DatabaseConfig, QueryConfig
-from models.schemas import AssetRecord
 
 
 class RAGService:
-    """Service for handling RAG-based queries using ChromaDB."""
+    """Service for handling PDF-based RAG queries using ChromaDB."""
     
-    def __init__(self, chroma_path: str = None):
+    def __init__(self, chroma_path: str = None, pdf_folder: str = None):
         self.chroma_path = chroma_path or config.chroma_db_path
+        self.pdf_folder = pdf_folder or os.path.join(os.getcwd(), "SMART_Logistics_KnowledgeBase_Full")
         self.embedding_model = SentenceTransformer(DatabaseConfig.EMBEDDING_MODEL)
-        self.llm = ChatOpenAI(
+        self.llm= ChatOpenAI(
             model="gpt-4o-mini",
-            openai_api_key=config.openai_api_key,
-            temperature=QueryConfig.RAG_RESPONSE_TEMPERATURE
+            api_key=config.openai_api_key,
+            temperature=QueryConfig.AGENT_TEMPERATURE
         )
-        
+
         # Initialize ChromaDB
         self._init_chromadb()
         
-        # Initialize text splitter
+        # Initialize text splitter for PDFs
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
+            chunk_size=1500,  # Larger chunks for PDF content
+            chunk_overlap=300,  # More overlap for context preservation
             length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]
         )
     
     def _init_chromadb(self):
@@ -47,39 +51,158 @@ class RAGService:
             # Initialize ChromaDB client
             self.chroma_client = chromadb.PersistentClient(path=self.chroma_path)
             
-            # Get or create collection
+            # Get or create collection for PDF documents
             self.collection = self.chroma_client.get_or_create_collection(
-                name=DatabaseConfig.CHROMA_COLLECTION_NAME,
+                name="pdf_documents",
                 metadata={"hnsw:space": DatabaseConfig.CHROMA_DISTANCE_FUNCTION}
             )
+            
+            print(f"✅ ChromaDB initialized: {self.collection.count()} documents loaded")
             
         except Exception as e:
             raise Exception(f"Failed to initialize ChromaDB: {str(e)}")
     
-    def add_asset_documents(self, assets: List[AssetRecord]) -> Dict[str, Any]:
-        """Add asset records as documents to the vector store."""
+    def load_pdf_documents(self, pdf_folder: str = None) -> Dict[str, Any]:
+        """Load all PDF and DOCX documents from the specified folder into ChromaDB."""
         try:
+            folder_path = pdf_folder or self.pdf_folder
+            
+            if not os.path.exists(folder_path):
+                return {
+                    'success': False,
+                    'error': f"PDF folder not found: {folder_path}"
+                }
+            
+            print(f"\n{'='*80}")
+            print(f"📚 Loading documents from: {folder_path}")
+            print(f"{'='*80}")
+            
             documents = []
             metadatas = []
             ids = []
             
-            for asset in assets:
-                # Create document text from asset data
-                doc_text = self._asset_to_document(asset)
-                
-                # Create metadata
-                metadata = {
-                    'asset_id': asset.asset_id,
-                    'product_name': asset.product_name or '',
-                    'account_name': asset.account_name or '',
-                    'state_of_pallet': asset.state_of_pallet or '',
-                    'current_location': asset.current_location or '',
-                    'battery_voltage': asset.battery_voltage if asset.battery_voltage is not None else 0.0
+            # Find all PDF files
+            pdf_files = list(Path(folder_path).glob("*.pdf"))
+            all_files = pdf_files 
+            
+            print(f"📄 Found {len(pdf_files)} PDF files")
+            
+            if not all_files:
+                return {
+                    'success': False,
+                    'error': f"No PDF files found in {folder_path}"
                 }
+            
+            total_chunks = 0
+            
+            for file_path in all_files:
+                try:
+                    print(f"\n📖 Processing: {file_path.name}")
+                    
+                    # Load document based on type
+                    if file_path.suffix.lower() == '.pdf':
+                        loader = PyPDFLoader(str(file_path))
+                    else:
+                        continue
+                    
+                    pages = loader.load()
+                    print(f"   ✓ Loaded {len(pages)} pages")
+                    
+                    # Process each page
+                    for page_num, page in enumerate(pages):
+                        # Split page content into chunks
+                        chunks = self.text_splitter.split_text(page.page_content)
+                        
+                        for chunk_num, chunk in enumerate(chunks):
+                            if len(chunk.strip()) < 50:  # Skip very small chunks
+                                continue
+                            
+                            documents.append(chunk)
+                            metadatas.append({
+                                'source': file_path.name,
+                                'file_path': str(file_path),
+                                'page': page_num + 1,
+                                'chunk': chunk_num,
+                                'type': 'pdf' if file_path.suffix.lower() == '.pdf' else 'docx',
+                                'total_pages': len(pages)
+                            })
+                            ids.append(f"{file_path.stem}_page{page_num + 1}_chunk{chunk_num}")
+                            total_chunks += 1
+                    
+                    print(f"   ✓ Created {total_chunks - len(ids) + len(chunks)} chunks")
+                    
+                except Exception as e:
+                    print(f"   ⚠️  Error processing {file_path.name}: {str(e)}")
+                    continue
+            
+            if not documents:
+                return {
+                    'success': False,
+                    'error': "No content extracted from documents"
+                }
+            
+            # Add all documents to ChromaDB
+            print(f"\n💾 Adding {len(documents)} chunks to ChromaDB...")
+            self.collection.add(
+                documents=documents,
+                metadatas=metadatas,
+                ids=ids
+            )
+            
+            print(f"✅ Successfully loaded {len(all_files)} documents with {len(documents)} chunks")
+            print(f"{'='*80}\n")
+            
+            return {
+                'success': True,
+                'files_processed': len(all_files),
+                'total_chunks': len(documents),
+                'file_names': [f.name for f in all_files]
+            }
+            
+        except Exception as e:
+            print(f"❌ Error loading PDF documents: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def load_single_pdf(self, pdf_path: str) -> Dict[str, Any]:
+        """Load a single PDF file into the vector store."""
+        try:
+            if not os.path.exists(pdf_path):
+                return {
+                    'success': False,
+                    'error': f"PDF file not found: {pdf_path}"
+                }
+            
+            print(f"\n📖 Loading PDF: {os.path.basename(pdf_path)}")
+            
+            loader = PyPDFLoader(pdf_path)
+            pages = loader.load()
+            
+            documents = []
+            metadatas = []
+            ids = []
+            
+            file_name = Path(pdf_path).stem
+            
+            for page_num, page in enumerate(pages):
+                chunks = self.text_splitter.split_text(page.page_content)
                 
-                documents.append(doc_text)
-                metadatas.append(metadata)
-                ids.append(asset.asset_id)
+                for chunk_num, chunk in enumerate(chunks):
+                    if len(chunk.strip()) < 50:
+                        continue
+                    
+                    documents.append(chunk)
+                    metadatas.append({
+                        'source': os.path.basename(pdf_path),
+                        'file_path': pdf_path,
+                        'page': page_num + 1,
+                        'chunk': chunk_num,
+                        'type': 'pdf',
+                        'total_pages': len(pages)
+                    })
+                    ids.append(f"{file_name}_page{page_num + 1}_chunk{chunk_num}")
             
             # Add to ChromaDB
             self.collection.add(
@@ -88,50 +211,12 @@ class RAGService:
                 ids=ids
             )
             
-            return {
-                'success': True,
-                'documents_added': len(documents)
-            }
-            
-        except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
-    def add_contextual_documents(self, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Add contextual documentation to the vector store."""
-        try:
-            doc_texts = []
-            metadatas = []
-            ids = []
-            
-            for i, doc in enumerate(documents):
-                content = doc.get('content', '')
-                
-                # Split long documents into chunks
-                chunks = self.text_splitter.split_text(content)
-                
-                for j, chunk in enumerate(chunks):
-                    doc_texts.append(chunk)
-                    metadatas.append({
-                        'source': doc.get('source', f'document_{i}'),
-                        'type': doc.get('type', 'contextual'),
-                        'chunk_index': j,
-                        'title': doc.get('title', '')
-                    })
-                    ids.append(f"doc_{i}_chunk_{j}")
-            
-            # Add to ChromaDB
-            self.collection.add(
-                documents=doc_texts,
-                metadatas=metadatas,
-                ids=ids
-            )
+            print(f"✅ Loaded {len(pages)} pages, created {len(documents)} chunks")
             
             return {
                 'success': True,
-                'documents_added': len(doc_texts)
+                'pages_loaded': len(pages),
+                'chunks_created': len(documents)
             }
             
         except Exception as e:
@@ -178,7 +263,7 @@ class RAGService:
             context = self._build_context(context_docs, metadatas, distances)
             
             # Generate response using LLM
-            print(f"🤖 Generating response using OpenAI with context...")
+            print(f"🤖 Generating response using Gemini with context...")
             response = self._generate_rag_response(question, context)
             
             # Calculate confidence score
@@ -206,91 +291,47 @@ class RAGService:
                 'sources': []
             }
     
-    def _asset_to_document(self, asset: AssetRecord) -> str:
-        """Convert asset record to searchable document text."""
-        doc_parts = []
-        
-        # Asset ID and basic info
-        doc_parts.append(f"Asset ID: {asset.asset_id}")
-        
-        if asset.product_name:
-            doc_parts.append(f"Product: {asset.product_name}")
-        
-        if asset.account_name:
-            doc_parts.append(f"Account: {asset.account_name}")
-        
-        if asset.current_location:
-            doc_parts.append(f"Current Location: {asset.current_location}")
-        
-        if asset.state_of_pallet:
-            doc_parts.append(f"State: {asset.state_of_pallet}")
-        
-        # Battery information
-        if asset.battery_voltage is not None:
-            doc_parts.append(f"Battery Voltage: {asset.battery_voltage}V")
-        
-        if asset.est_battery_calculate is not None:
-            doc_parts.append(f"Estimated Battery: {asset.est_battery_calculate}%")
-        
-        # Status information
-        if asset.action_needed:
-            doc_parts.append(f"Action Needed: {asset.action_needed}")
-        
-        if asset.cardinal_tag is not None:
-            doc_parts.append(f"Cardinal Tag: {'Yes' if asset.cardinal_tag else 'No'}")
-        
-        if asset.power_reset_occurred is not None:
-            doc_parts.append(f"Power Reset Occurred: {'Yes' if asset.power_reset_occurred else 'No'}")
-        
-        # Date information
-        if asset.date_shipped:
-            doc_parts.append(f"Date Shipped: {asset.date_shipped.strftime('%Y-%m-%d')}")
-        
-        if asset.last_connected:
-            doc_parts.append(f"Last Connected: {asset.last_connected.strftime('%Y-%m-%d %H:%M')}")
-        
-        if asset.power_reset_time:
-            doc_parts.append(f"Power Reset Time: {asset.power_reset_time.strftime('%Y-%m-%d %H:%M')}")
-        
-        # Additional info
-        if asset.powerup_time is not None:
-            doc_parts.append(f"Powerup Time: {asset.powerup_time} seconds")
-        
-        if asset.account_address:
-            doc_parts.append(f"Account Address: {asset.account_address}")
-        
-        return " | ".join(doc_parts)
+
     
     def _build_context(self, documents: List[str], metadatas: List[Dict], distances: List[float]) -> str:
-        """Build context string from search results."""
+        """Build context string from search results with source citations."""
         context_parts = []
         
-        for doc, metadata, distance in zip(documents, metadatas, distances):
-            # Add document with relevance score
-            relevance = max(0, 1 - distance)  # Convert distance to relevance
-            context_parts.append(f"[Relevance: {relevance:.2f}] {doc}")
+        for i, (doc, metadata, distance) in enumerate(zip(documents, metadatas, distances), 1):
+            relevance = max(0, 1 - distance)
+            source = metadata.get('source', 'Unknown')
+            page = metadata.get('page', '?')
+            
+            # Format: [Source Number] (Source: filename, Page: X) [Relevance: 0.XX]
+            # Content...
+            context_parts.append(
+                f"[Source {i}] (Source: {source}, Page: {page}) [Relevance: {relevance:.2f}]\n{doc}"
+            )
         
-        return "\n\n".join(context_parts)
+        return "\n\n" + "="*80 + "\n\n".join(context_parts)
     
     def _generate_rag_response(self, question: str, context: str) -> str:
-        """Generate response using LLM with retrieved context."""
+        """Generate response using LLM with retrieved context from PDFs."""
         prompt = f"""
-        You are an expert assistant for asset tracking and management. Answer the user's question based on the provided context about asset data.
-        
-        Context Information:
-        {context}
-        
-        User Question: {question}
-        
-        Instructions:
-        - Provide a clear, informative answer based on the context
-        - If the context doesn't contain enough information, say so clearly
-        - Focus on asset management, tracking, and operational insights
-        - Use specific examples from the context when relevant
-        - Be concise but comprehensive
-        
-        Answer:
-        """
+You are an expert assistant for SMART Logistics asset tracking and supply chain management. 
+Answer the user's question based on the provided context from company documentation.
+
+Context Information (from PDF documents):
+{context}
+
+User Question: {question}
+
+Instructions:
+- Provide a clear, detailed answer based ONLY on the information in the context
+- Cite the source documents when providing information (e.g., "According to [Source Name]...")
+- If the context doesn't contain enough information, clearly state what's missing
+- Focus on logistics, asset tracking, supply chain operations, and SMART platform features
+- Use specific examples, metrics, and details from the context when relevant
+- Be comprehensive but organized - use bullet points or sections for complex answers
+- If you reference specific data or claims, indicate which source document it came from
+
+Answer:
+"""
         
         try:
             response = self.llm.invoke(prompt)
@@ -308,32 +349,46 @@ class RAGService:
         return sum(relevance_scores) / len(relevance_scores)
     
     def _format_sources(self, documents: List[str], metadatas: List[Dict], distances: List[float]) -> List[Dict[str, Any]]:
-        """Format source information for response."""
+        """Format source information for response with PDF details."""
         sources = []
         
         for doc, metadata, distance in zip(documents, metadatas, distances):
+            relevance = max(0, 1 - distance)
             source = {
-                'content': doc[:200] + "..." if len(doc) > 200 else doc,
-                'metadata': metadata,
-                'relevance_score': max(0, 1 - distance)
+                'content': doc[:300] + "..." if len(doc) > 300 else doc,
+                'file_name': metadata.get('source', 'Unknown'),
+                'page': metadata.get('page', 'N/A'),
+                'chunk': metadata.get('chunk', 0),
+                'document_type': metadata.get('type', 'unknown'),
+                'relevance_score': relevance,
+                'file_path': metadata.get('file_path', '')
             }
             sources.append(source)
         
         return sources
     
     def get_collection_stats(self) -> Dict[str, Any]:
-        """Get statistics about the vector collection."""
+        """Get statistics about the PDF document collection."""
         try:
             count = self.collection.count()
             
-            # Get sample documents
-            sample_results = self.collection.peek(limit=5)
+            # Get all metadata to analyze sources
+            all_data = self.collection.get()
+            metadatas = all_data.get('metadatas', [])
+            
+            # Count unique source files
+            sources = set()
+            for metadata in metadatas:
+                if 'source' in metadata:
+                    sources.add(metadata['source'])
             
             return {
-                'total_documents': count,
-                'collection_name': DatabaseConfig.CHROMA_COLLECTION_NAME,
+                'total_chunks': count,
+                'unique_documents': len(sources),
+                'collection_name': 'pdf_documents',
                 'embedding_model': DatabaseConfig.EMBEDDING_MODEL,
-                'sample_documents': len(sample_results.get('documents', []))
+                'pdf_folder': self.pdf_folder,
+                'source_files': sorted(list(sources))
             }
             
         except Exception as e:
@@ -342,18 +397,20 @@ class RAGService:
             }
     
     def clear_collection(self) -> Dict[str, Any]:
-        """Clear all documents from the collection."""
+        """Clear all PDF documents from the collection."""
         try:
             # Delete the collection and recreate it
-            self.chroma_client.delete_collection(DatabaseConfig.CHROMA_COLLECTION_NAME)
+            self.chroma_client.delete_collection("pdf_documents")
             self.collection = self.chroma_client.get_or_create_collection(
-                name=DatabaseConfig.CHROMA_COLLECTION_NAME,
+                name="pdf_documents",
                 metadata={"hnsw:space": DatabaseConfig.CHROMA_DISTANCE_FUNCTION}
             )
             
+            print("✅ PDF collection cleared successfully")
+            
             return {
                 'success': True,
-                'message': 'Collection cleared successfully'
+                'message': 'PDF collection cleared successfully'
             }
             
         except Exception as e:
@@ -362,105 +419,94 @@ class RAGService:
                 'error': str(e)
             }
     
-    def add_business_context(self):
-        """Add business context documents about asset management."""
-        business_docs = [
-            {
-                'title': 'Asset State Definitions',
-                'content': '''
-                Asset State Definitions:
-                
-                In Network: Asset is actively connected and operating within the tracking network. 
-                These assets are providing regular status updates and location information.
-                
-                In Transit: Asset is currently being transported between locations. May have 
-                limited connectivity during transportation but should reconnect upon arrival.
-                
-                Returned for Refurbishment - DEACTIVATED: Asset has been returned to the facility 
-                for maintenance, repair, or refurbishment. Asset is temporarily deactivated.
-                
-                Deactivated Tags - Returned/retired: Assets that have been permanently deactivated 
-                and returned to inventory or retired from service.
-                
-                Deactivated Tags - Not Returned: Assets that have been deactivated but have not 
-                yet been physically returned to the facility.
-                ''',
-                'source': 'business_documentation',
-                'type': 'definitions'
-            },
-            {
-                'title': 'Product Information',
-                'content': '''
-                Product Types:
-                
-                AT3 Pilot: Third-generation asset tracking device with pilot program features. 
-                Designed for comprehensive asset monitoring with enhanced battery life and 
-                connectivity options.
-                
-                AT5 - Bracket: Fifth-generation asset tracking device with bracket mounting system. 
-                Provides improved durability and installation flexibility for various asset types.
-                
-                Battery Voltage: Critical monitoring parameter. Normal operating range is typically 
-                6V to 12V. Voltages below 6V may indicate need for battery replacement or charging.
-                
-                Power Reset: Indicates whether the device has experienced a power cycle or reset. 
-                Can be caused by maintenance, battery issues, or system updates.
-                ''',
-                'source': 'product_documentation',
-                'type': 'product_info'
-            },
-            {
-                'title': 'Asset Management Processes',
-                'content': '''
-                Asset Management Processes:
-                
-                Shipping Process: Assets are assigned to accounts and shipped to customer locations. 
-                Date_Shipped tracks when the asset left the facility.
-                
-                Connection Monitoring: Last_Connected timestamp shows when the asset last 
-                communicated with the tracking system. Extended periods without connection 
-                may indicate connectivity issues or device problems.
-                
-                Action Needed: Field indicating required actions such as "RMA to SMART" 
-                (Return Merchandise Authorization to SMART facility) for maintenance or replacement.
-                
-                Cardinal Tag: Indicates whether the asset is part of the Cardinal tracking system, 
-                which provides enhanced monitoring and management capabilities.
-                
-                Location Tracking: Current_Location_Name shows the asset's last known location, 
-                which may be a customer site, distribution center, or in-transit status.
-                ''',
-                'source': 'process_documentation',
-                'type': 'processes'
+    def list_loaded_documents(self) -> List[str]:
+        """List all PDF documents currently loaded in the collection."""
+        try:
+            all_data = self.collection.get()
+            metadatas = all_data.get('metadatas', [])
+            
+            sources = set()
+            for metadata in metadatas:
+                if 'source' in metadata:
+                    sources.add(metadata['source'])
+            
+            return sorted(list(sources))
+            
+        except Exception as e:
+            print(f"Error listing documents: {str(e)}")
+            return []
+    
+    def search_documents(self, query: str, n_results: int = 10, filter_by_source: str = None) -> Dict[str, Any]:
+        """Search for specific content in loaded PDF documents."""
+        try:
+            where_filter = None
+            if filter_by_source:
+                where_filter = {"source": filter_by_source}
+            
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=n_results,
+                where=where_filter,
+                include=['documents', 'metadatas', 'distances']
+            )
+            
+            return {
+                'success': True,
+                'results': results,
+                'num_results': len(results['documents'][0]) if results['documents'] else 0
             }
-        ]
-        
-        return self.add_contextual_documents(business_docs)
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
     
     def clear_all_data(self):
-        """Clear all data from ChromaDB collection without creating orphaned folders."""
+        """Clear all PDF data from ChromaDB collection without creating orphaned folders."""
         try:
             # Get current collection count before clearing
             old_count = self.collection.count()
-            print(f"📊 Current collection has {old_count} documents")
+            print(f"📊 Current collection has {old_count} PDF chunks")
             
             # Get all IDs and delete them (keeps same collection, no new UUID folder)
             if old_count > 0:
-                # Peek at all document IDs (ChromaDB requires IDs for deletion)
+                # Get all document IDs (ChromaDB requires IDs for deletion)
                 all_data = self.collection.get()
                 all_ids = all_data['ids']
                 
                 # Delete all documents
                 self.collection.delete(ids=all_ids)
-                print(f"✅ Deleted {len(all_ids)} documents from ChromaDB collection")
+                print(f"✅ Deleted {len(all_ids)} PDF chunks from ChromaDB collection")
             else:
                 print(f"ℹ️  Collection was already empty")
             
             # Verify it's empty
             new_count = self.collection.count()
-            print(f"✅ ChromaDB collection cleared: {DatabaseConfig.CHROMA_COLLECTION_NAME} (0 documents)")
+            print(f"✅ ChromaDB PDF collection cleared: pdf_documents (0 documents)")
             
-            return {'success': True, 'message': f'ChromaDB cleared successfully ({old_count} documents removed)'}
+            return {'success': True, 'message': f'ChromaDB cleared successfully ({old_count} PDF chunks removed)'}
         except Exception as e:
             print(f"❌ Error clearing ChromaDB: {str(e)}")
             return {'success': False, 'error': str(e)}
+    
+    def reload_all_pdfs(self) -> Dict[str, Any]:
+        """Clear existing data and reload all PDFs from the folder."""
+        try:
+            print("\n🔄 Reloading all PDF documents...")
+            
+            # Clear existing data
+            clear_result = self.clear_all_data()
+            if not clear_result['success']:
+                return clear_result
+            
+            # Load all PDFs
+            load_result = self.load_pdf_documents()
+            
+            return load_result
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }

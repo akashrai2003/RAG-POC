@@ -14,7 +14,7 @@ from config.settings import config
 from services.sql_service import SQLService
 from services.rag_service import RAGService
 from services.data_service import DataProcessingService
-from services.agent_service_parallel import ParallelAssetRAGAgent
+from services.agent_service import SmartAssetRAGAgent
 from models.schemas import QueryRequest
 
 
@@ -67,14 +67,15 @@ class SimpleAssetRAGInterface:
                     )
                     print("Data Service initialized")
                     
-                    st.session_state.agent = ParallelAssetRAGAgent(
+                    st.session_state.agent = SmartAssetRAGAgent(
                         st.session_state.sql_service,
                         st.session_state.rag_service
                     )
-                    print("Parallel Agent initialized")
+                    print("Smart Agent initialized (with tool calling)")
                     
-                    st.session_state.rag_service.add_business_context()
-                    print("Business context added")
+                    # Note: Business context is now loaded from PDFs, not hard-coded
+                    # st.session_state.rag_service.add_business_context()
+                    # print("Business context added")
                     
                     st.session_state.services_initialized = True
                     print("="*80 + "\n")
@@ -93,30 +94,43 @@ class SimpleAssetRAGInterface:
         st.title("RAG PoC")
         st.caption("Natural language assistant for Einstein Data Cloud")
         
-        # Info banner about Einstein Analytics
-        st.info("🔗 Connected to Salesforce Einstein Data Cloud - querying live data directly!")
+        # Info banner about Einstein Analytics and optimization
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            st.info("🔗 Connected to Salesforce Einstein Data Cloud - querying live data directly!")
+        with col2:
+            st.success("⚡ Smart Routing: 1-2 LLM calls per query")
         
         # Single tab: Query only (upload managed in Salesforce)
         self.render_query_interface()
     
     def render_query_interface(self):
         """Render the query interface."""
-        st.subheader("Ask Questions About Your Files")
+        st.subheader("Ask Questions About Your Data & Documentation")
         
-        # Example queries
+        # Example queries with smart routing indicators
         with st.expander("💡 Example Queries"):
-            st.markdown("""
-            **Numerical Queries:**
-            - Show assets with battery voltage less than 6
-            - Count assets by state
-            - What's the average battery voltage?
-            - Show me assets shipped after 2024-01-01
+            col1, col2 = st.columns(2)
             
-            **Contextual Queries:**
-            - What does "In Network" state mean?
-            - Explain the AT3 Pilot product
-            - What actions are typically needed for assets?
-            """)
+            with col1:
+                st.markdown("**📊 Data Queries** *(2 LLM calls)*")
+                st.markdown("""
+                - Show assets with battery voltage less than 6
+                - Count assets by state
+                - List all assets with Cardinal Tags
+                - Show me assets shipped after 2024-01-01
+                - What's the average battery voltage?
+                """)
+            
+            with col2:
+                st.markdown("**📚 Documentation Queries** *(1 LLM call)*")
+                st.markdown("""
+                - What is a Cardinal Tag?
+                - Explain the "In Transit" state
+                - What does FRIG mean?
+                - Describe the AT3 Pilot product
+                - What actions are typically needed?
+                """)
         
         # Query input
         query = st.text_area(
@@ -142,16 +156,38 @@ class SimpleAssetRAGInterface:
                     response = asyncio.run(st.session_state.agent.query(query_request))
                     
                     if response.success:
-                        # Show only the answer - hide all implementation details
-                        st.success(f"Completed in {response.execution_time:.2f}s")
+                        # Show completion with smart routing info
+                        llm_calls = response.metadata.get('llm_calls', 'N/A')
+                        query_type = response.query_type
+                        
+                        # Create status message based on query type
+                        if query_type == "rag":
+                            status_icon = "📚"
+                            status_text = f"Documentation query • {llm_calls} LLM call"
+                        elif query_type == "data":
+                            status_icon = "📊"
+                            status_text = f"Data query • {llm_calls} LLM calls"
+                        else:
+                            status_icon = "🔄"
+                            status_text = f"Hybrid query • {llm_calls} LLM calls"
+                        
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.success(f"{status_icon} {status_text}")
+                        with col2:
+                            st.metric("Time", f"{response.execution_time:.2f}s")
                         
                         # Show answer in a clean format
                         st.markdown("### Answer")
                         st.write(response.response)
                         
+                        # Show source citations if available
+                        if response.metadata.get('rag_sources', 0) > 0:
+                            st.caption(f"📖 {response.metadata['rag_sources']} documentation sources used")
+                        
                         # Optionally show data table if available (without revealing it's SQL)
                         if response.data and len(response.data) > 0:
-                            with st.expander(f"View Detailed Results ({len(response.data)} records)"):
+                            with st.expander(f"📋 View Detailed Results ({len(response.data)} records)"):
                                 df = pd.DataFrame(response.data)
                                 st.dataframe(df, use_container_width=True, hide_index=True)
                     

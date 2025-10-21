@@ -16,9 +16,18 @@ requests
 openai
 langchain
 langchain-openai
+langchain-google-genai
 langgraph
 langchain-community
 sentence-transformers
+
+# PDF and document processing
+pypdf
+PyPDF2
+pymupdf
+python-docx
+unstructured
+pdfplumber
 
 # Utilities
 python-dotenv
