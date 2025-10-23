@@ -108,7 +108,6 @@ class SQLService:
             
             # Get database schema
             schema_info = self._get_schema_info()
-            print("Schema Info:", schema_info)  # Debug: show schema info
             # Generate SAQL query using LLM (with optional RAG context)
             print(f"🤖 Generating SAQL query using LLM...")
             saql_query = self._generate_saql_query(query_description, schema_info, rag_context)
@@ -155,12 +154,13 @@ class SQLService:
 BUSINESS CONTEXT FROM DOCUMENTATION:
 {rag_context}
 
-CRITICAL: Use this context to understand business logic and formulas.
+CRITICAL: Use this context to understand business logic, formulas and the correct column/field names to be used while writing the SAQL query.
 - If the context defines HOW something is calculated (formulas, conditions), implement that logic in SAQL
 - Don't just filter by status fields - implement the actual business rules
 - Example: "Rogue Asset" might be calculated based on date differences, not just a status field
 
 Map business terms to database columns AND their calculation logic.
+
 """
         
         prompt = f"""You are a SAQL expert which generates queries that are to be executed in Salesforce Einstein Analytics DB. Generate ONLY the SAQL query string, no explanations or markdown.
@@ -169,9 +169,9 @@ Dataset: {self.dataset_id}/{self.dataset_version}
 {schema_info}
 
 {rag_section}Field Mappings:
-battery/voltage→Battery_Voltage__c, state/status→State_of_Pallet__c, location→Current_Location_Name__c, product→Product_Name__c, account→Account_Name__c, asset_id→Asset_ID__c, last_connected→Last_Connected__c, date_shipped→Date_Shipped__c, total_dwell_days/days_in_transit→Total_Dwell_Days__c
+battery/voltage→Battery_Voltage__c, state/status→State_of_Pallet__c, location→Current_Location_Name__c, product→Product_Name__c, account→Account_Name__c, asset_id→Asset_ID__c, last_connected→Last_Connected__c, date_shipped→Date_Shipped__c, total_dwell_days/days_in_transit→Total_Dwell_Days__c, total_dwell_days/days_in_network → Total_Dwell_Days_CL__c
 
-IMPORTANT: Total_Dwell_Days__c is a pre-calculated field that contains the number of days an asset has been in transit.
+IMPORTANT: Total_Dwell_Days__c and Total_Dwell_Days_CL__c are pre-calculated fields that contain the number of days an asset has been in transit.
 Use this field when queries ask about "rogue" assets, "days in transit", or time-based asset status.
 
 User Request: {query_description}

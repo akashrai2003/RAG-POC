@@ -14,9 +14,11 @@ from typing import Dict, List, Any, Optional
 import json
 import os
 from pathlib import Path
-
+import logging
 from config.settings import config, DatabaseConfig, QueryConfig
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class RAGService:
     """Service for handling PDF-based RAG queries using ChromaDB."""
@@ -314,7 +316,8 @@ class RAGService:
         """Generate response using LLM with retrieved context from PDFs."""
         prompt = f"""
 You are an expert assistant for SMART Logistics asset tracking and supply chain management. 
-Answer the user's question based on the provided context from company documentation.
+Answer the user's question based on the provided context from company documentation. Ensure that if there are multiple columns or specific terminology, you use them correctly as per the context.
+if there are similar terms / column names with subtle differences, pay close attention to the distinctions made in the context and have your answer reflect those distinctions accurately.
 
 Context Information (from PDF documents):
 {context}
@@ -322,6 +325,7 @@ Context Information (from PDF documents):
 User Question: {question}
 
 Instructions:
+- Take care of column names and specific terminology used in the context as there might be very subtle distinctions.
 - Provide a clear, detailed answer based ONLY on the information in the context
 - Cite the source documents when providing information (e.g., "According to [Source Name]...")
 - If the context doesn't contain enough information, clearly state what's missing
