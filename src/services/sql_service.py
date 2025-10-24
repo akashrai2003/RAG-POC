@@ -171,7 +171,7 @@ Dataset: {self.dataset_id}/{self.dataset_version}
 {rag_section}Field Mappings:
 battery/voltage→Battery_Voltage__c, state/status→State_of_Pallet__c, location→Current_Location_Name__c, product→Product_Name__c, account→Account_Name__c, asset_id→Asset_ID__c, last_connected→Last_Connected__c, date_shipped→Date_Shipped__c, total_dwell_days/days_in_transit→Total_Dwell_Days__c, total_dwell_days/days_in_network → Total_Dwell_Days_CL__c
 
-IMPORTANT: Total_Dwell_Days__c and Total_Dwell_Days_CL__c are pre-calculated fields that contain the number of days an asset has been in transit.
+IMPORTANT: Total_Dwell_Days__c and Total_Dwell_Days_CL__c are pre-calculated fields that contain the number of days an asset has been in network and in transit respectively.
 Use this field when queries ask about "rogue" assets, "days in transit", or time-based asset status.
 
 User Request: {query_description}
