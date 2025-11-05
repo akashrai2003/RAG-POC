@@ -1,5 +1,7 @@
 # Core dependencies
 streamlit
+fastapi
+uvicorn[standard]
 pandas
 numpy
 openpyxl
