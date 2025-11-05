@@ -20,7 +20,10 @@ class AppConfig(BaseSettings):
     app_version: str = Field(default="1.0.0")
     debug: bool = Field(default=True)
 
-    # OpenAI API
+    # Google API
+    # google_api_key: str = Field(default="")
+
+    # # OpenAI API
     openai_api_key: str = Field(default="")
     
     # Database Configuration

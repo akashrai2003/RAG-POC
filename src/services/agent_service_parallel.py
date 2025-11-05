@@ -5,6 +5,7 @@ Fast, single-pass execution with parallel tool calls.
 
 from typing import Dict, List, Any, Optional
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 import json
 import time
 import asyncio
@@ -24,9 +25,9 @@ class ParallelAssetRAGAgent:
         self.rag_service = rag_service
         
         # Initialize LLM
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            openai_api_key=config.openai_api_key,
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=config.google_api_key,
             temperature=QueryConfig.AGENT_TEMPERATURE
         )
     

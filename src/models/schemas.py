@@ -3,9 +3,10 @@ Data models and schemas for the RAG-POC application.
 """
 
 from datetime import datetime
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Union
 from pydantic import BaseModel, Field, validator
 import pandas as pd
+from uuid import UUID, uuid4
 
 
 class AssetRecord(BaseModel):
@@ -198,3 +199,148 @@ class AssetDataFrame:
             stats['state_distribution'] = self.df['State_of_Pallet__c'].value_counts().to_dict()
         
         return stats
+
+
+# Conversation and Message Models for API
+class MessageRole(str):
+    """Message role constants."""
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+
+
+class Message(BaseModel):
+    """Model for individual messages in a conversation."""
+    
+    id: str = Field(default_factory=lambda: str(uuid4()), description="Unique message identifier")
+    conversation_id: str = Field(..., description="ID of the conversation this message belongs to")
+    role: str = Field(..., description="Message role (user/assistant/system)")
+    content: str = Field(..., description="Message content")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional message metadata")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Message timestamp")
+    
+    @validator('role')
+    def validate_role(cls, v):
+        allowed_roles = [MessageRole.USER, MessageRole.ASSISTANT, MessageRole.SYSTEM]
+        if v not in allowed_roles:
+            raise ValueError(f"Role must be one of: {allowed_roles}")
+        return v
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+
+
+class Conversation(BaseModel):
+    """Model for conversations containing multiple messages."""
+    
+    id: str = Field(default_factory=lambda: str(uuid4()), description="Unique conversation identifier")
+    title: Optional[str] = Field(None, description="Conversation title")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Conversation creation timestamp")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")
+    user_id: Optional[str] = Field(None, description="User identifier")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional conversation metadata")
+    message_count: int = Field(default=0, description="Number of messages in conversation")
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+
+
+class ConversationWithMessages(Conversation):
+    """Conversation model that includes messages."""
+    
+    messages: List[Message] = Field(default_factory=list, description="Messages in the conversation")
+
+
+class CreateConversationRequest(BaseModel):
+    """Request model for creating a new conversation."""
+    
+    title: Optional[str] = Field(None, description="Conversation title")
+    user_id: Optional[str] = Field(None, description="User identifier")
+    initial_message: Optional[str] = Field(None, description="First message to add to conversation")
+
+
+class CreateMessageRequest(BaseModel):
+    """Request model for creating a new message."""
+    
+    conversation_id: str = Field(..., description="ID of the conversation")
+    role: str = Field(..., description="Message role (user/assistant)")
+    content: str = Field(..., min_length=1, description="Message content")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+    
+    @validator('role')
+    def validate_role(cls, v):
+        allowed_roles = [MessageRole.USER, MessageRole.ASSISTANT, MessageRole.SYSTEM]
+        if v not in allowed_roles:
+            raise ValueError(f"Role must be one of: {allowed_roles}")
+        return v
+    
+    @validator('content')
+    def validate_content(cls, v):
+        if not v.strip():
+            raise ValueError("Message content cannot be empty")
+        return v.strip()
+
+
+class QueryWithConversationRequest(BaseModel):
+    """Request model for processing queries within a conversation context."""
+    
+    query: str = Field(..., min_length=1, max_length=500, description="User query")
+    conversation_id: Optional[str] = Field(None, description="Existing conversation ID")
+    create_conversation: bool = Field(default=True, description="Create new conversation if none provided")
+    conversation_title: Optional[str] = Field(None, description="Title for new conversation")
+    user_id: Optional[str] = Field(None, description="User identifier")
+    context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional context")
+    
+    @validator('query')
+    def validate_query(cls, v):
+        if not v.strip():
+            raise ValueError("Query cannot be empty")
+        return v.strip()
+
+
+class QueryWithConversationResponse(BaseModel):
+    """Response model for queries with conversation context."""
+    
+    success: bool = Field(..., description="Whether query was successful")
+    query_type: str = Field(..., description="Type of query processed")
+    response: str = Field(..., description="Generated response text")
+    conversation_id: str = Field(..., description="ID of the conversation")
+    message_id: str = Field(..., description="ID of the assistant's response message")
+    data: Optional[List[Dict[str, Any]]] = Field(None, description="Structured data results")
+    sql_query: Optional[str] = Field(None, description="Generated SQL query if applicable")
+    execution_time: float = Field(..., description="Query execution time in seconds")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
+
+
+class ConversationListResponse(BaseModel):
+    """Response model for listing conversations."""
+    
+    conversations: List[Conversation] = Field(..., description="List of conversations")
+    total_count: int = Field(..., description="Total number of conversations")
+    page: int = Field(default=1, description="Current page number")
+    page_size: int = Field(default=50, description="Number of items per page")
+    has_more: bool = Field(default=False, description="Whether there are more pages")
+
+
+class ConversationStatsResponse(BaseModel):
+    """Response model for conversation statistics."""
+    
+    total_conversations: int = Field(..., description="Total number of conversations")
+    total_messages: int = Field(..., description="Total number of messages")
+    active_conversations_24h: int = Field(..., description="Conversations active in last 24 hours")
+    average_messages_per_conversation: float = Field(..., description="Average messages per conversation")
+    most_recent_conversation: Optional[datetime] = Field(None, description="Timestamp of most recent conversation")
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }

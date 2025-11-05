@@ -35,6 +35,11 @@ pydantic
 pydantic-settings
 typing-extensions
 
+# FastAPI backend
+fastapi
+uvicorn[standard]
+python-multipart
+
 # Development and testing
 pytest
 black
