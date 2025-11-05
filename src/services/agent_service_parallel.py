@@ -217,6 +217,11 @@ Respond with ONLY the JSON object, no other text.
         """Execute SQL query synchronously."""
         try:
             result = self.sql_service.execute_natural_language_query(query_description)
+            if result and isinstance(result, dict):
+                # copy saql_query -> sql_query if missing
+                if 'saql_query' in result and 'sql_query' not in result:
+                    result['sql_query'] = result.get('saql_query')
+
             # Return result whether it succeeded or failed
             return result
         except Exception as e:
