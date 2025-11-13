@@ -110,15 +110,16 @@ class SQLService:
             schema_info = self._get_schema_info()
             # Generate SAQL query using LLM (with optional RAG context)
             print(f"🤖 Generating SAQL query using LLM...")
-            saql_query = self._generate_saql_query(query_description, schema_info, rag_context)
+            saql_result = self._generate_saql_query(query_description, schema_info, rag_context)
 
-            if not saql_query:
+            if not saql_result or saql_result[0] is None:
                 print(f"❌ Failed to generate SAQL query")
                 return {
                     'success': False,
                     'error': 'Could not generate SAQL query'
                 }
             
+            saql_query, token_usage = saql_result
             print(f"✅ Generated SAQL Query:")
             print(f"   {saql_query}")
             
@@ -126,6 +127,7 @@ class SQLService:
             print(f"⚡ Executing SAQL query...")
             result = self._query_saql(saql_query)
             result['saql_query'] = saql_query
+            result['token_usage'] = token_usage
             
             if result.get('success'):
                 row_count = len(result.get('data', []))
@@ -296,15 +298,20 @@ implement that calculation logic in SAQL instead of just filtering by a status f
             response = self.llm.invoke(prompt)
             saql_query = response.content.strip()
             print("Raw LLM Response:", saql_query)  # Debug: show raw response
+            
+            # Track token usage
+            input_tokens = response.response_metadata.get('token_usage', {}).get('prompt_tokens', 0)
+            output_tokens = response.response_metadata.get('token_usage', {}).get('completion_tokens', 0)
+            
             # Clean up markdown formatting
             saql_query = re.sub(r'```saql\n?', '', saql_query)
             saql_query = re.sub(r'```\n?', '', saql_query)
             saql_query = saql_query.strip()
             
             if "load" not in saql_query.lower():
-                return None
+                return None, {'input_tokens': input_tokens, 'output_tokens': output_tokens}
 
-            return saql_query
+            return saql_query, {'input_tokens': input_tokens, 'output_tokens': output_tokens}
             
         except Exception as e:
             print(f"Error generating SAQL query: {e}")

@@ -266,7 +266,7 @@ class RAGService:
             
             # Generate response using LLM
             print(f"🤖 Generating response using Gemini with context...")
-            response = self._generate_rag_response(question, context)
+            response, token_usage = self._generate_rag_response(question, context)
             
             # Calculate confidence score
             confidence = self._calculate_confidence(distances)
@@ -280,7 +280,8 @@ class RAGService:
                 'success': True,
                 'response': response,
                 'sources': sources,
-                'confidence': confidence
+                'confidence': confidence,
+                'token_usage': token_usage
             }
             
         except Exception as e:
@@ -318,6 +319,7 @@ class RAGService:
 You are an expert assistant for SMART Logistics asset tracking and supply chain management. 
 Answer the user's question based on the provided context from company documentation. Ensure that if there are multiple columns or specific terminology, you use them correctly as per the context.
 if there are similar terms / column names with subtle differences, pay close attention to the distinctions made in the context and have your answer reflect those distinctions accurately.
+If the query has anything related to any business term then ensure that in your response mention the column names as mentioned in the context.
 
 Context Information (from PDF documents):
 {context}
@@ -339,9 +341,14 @@ Answer:
         
         try:
             response = self.llm.invoke(prompt)
-            return response.content.strip()
+            
+            # Track token usage
+            input_tokens = response.response_metadata.get('token_usage', {}).get('prompt_tokens', 0)
+            output_tokens = response.response_metadata.get('token_usage', {}).get('completion_tokens', 0)
+            
+            return response.content.strip(), {'input_tokens': input_tokens, 'output_tokens': output_tokens}
         except Exception as e:
-            return f"Error generating response: {str(e)}"
+            return f"Error generating response: {str(e)}", {'input_tokens': 0, 'output_tokens': 0}
     
     def _calculate_confidence(self, distances: List[float]) -> float:
         """Calculate confidence score based on search distances."""

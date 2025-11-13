@@ -102,8 +102,20 @@ class ParallelAssetRAGAgent:
                     result = future.result()
                     if tool_type == 'sql':
                         sql_result = result
+                        # Extract token usage from SQL service
+                        if result and 'token_usage' in result:
+                            sql_tokens = result['token_usage']
+                            total_input_tokens += sql_tokens.get('input_tokens', 0)
+                            total_output_tokens += sql_tokens.get('output_tokens', 0)
+                            print(f"   💰 SQL generation used: {sql_tokens.get('input_tokens', 0)} input, {sql_tokens.get('output_tokens', 0)} output tokens")
                     else:
                         rag_result = result
+                        # Extract token usage from RAG service
+                        if result and 'token_usage' in result:
+                            rag_tokens = result['token_usage']
+                            total_input_tokens += rag_tokens.get('input_tokens', 0)
+                            total_output_tokens += rag_tokens.get('output_tokens', 0)
+                            print(f"   💰 RAG generation used: {rag_tokens.get('input_tokens', 0)} input, {rag_tokens.get('output_tokens', 0)} output tokens")
             
             print(f"✅ All tools executed")
             
