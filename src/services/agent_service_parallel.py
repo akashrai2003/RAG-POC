@@ -63,6 +63,9 @@ class ParallelAssetRAGAgent:
             # IMPORTANT: If SQL is needed, always include RAG for business context
             if use_sql and not use_rag:
                 use_rag = True
+                # Use the SQL query description for RAG context if rag_question is empty
+                if not rag_question or rag_question.strip() == "":
+                    rag_question = sql_query_desc or query_request.query
                 print(f"ℹ️  Auto-enabling RAG to provide business context for SQL query")
             
             print(f"✅ Analysis complete:")
@@ -119,21 +122,7 @@ class ParallelAssetRAGAgent:
             
             print(f"✅ All tools executed")
             
-            # Print RAG context that will be used for SQL query generation
-            if rag_result and rag_result.get('success'):
-                print(f"\n{'~'*80}")
-                print(f"📚 RAG CONTEXT FOR SQL GENERATION:")
-                print(f"{'~'*80}")
-                rag_response = rag_result.get('response', '')
-                print(f"{rag_response}")
-                print(f"{'~'*80}")
-            
-            print(f"{'='*80}\n")
-            
             # Step 3: Generate final response
-            print(f"{'='*80}")
-            print(f"📝 STEP 3: Final Response Generation")
-            print(f"{'='*80}")
             print(f"🤖 Generating final answer with collected results...")
             
             final_response_result = await self._generate_final_response(
@@ -249,7 +238,6 @@ Respond with ONLY the JSON object, no other text.
         
         response = self.llm.invoke(analysis_prompt)
         response_text = response.content.strip()
-        print(response_text)
         # Track token usage
         input_tokens = response.response_metadata.get('token_usage', {}).get('prompt_tokens', 0)
         output_tokens = response.response_metadata.get('token_usage', {}).get('completion_tokens', 0)
