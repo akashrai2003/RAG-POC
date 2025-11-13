@@ -53,9 +53,14 @@ class ParallelAssetRAGAgent:
             sql_query_desc = tool_decision.get('sql_query', '')
             rag_question = tool_decision.get('rag_question', query_request.query)
             
+            # IMPORTANT: If SQL is needed, always include RAG for business context
+            if use_sql and not use_rag:
+                use_rag = True
+                print(f"ℹ️  Auto-enabling RAG to provide business context for SQL query")
+            
             print(f"✅ Analysis complete:")
             print(f"   🔹 Use SQL: {use_sql}")
-            print(f"   🔹 Use RAG: {use_rag}")
+            print(f"   🔹 Use RAG: {use_rag} {'(auto-enabled for SQL context)' if use_sql else ''}")
             if use_sql:
                 print(f"   🔹 SQL Query: {sql_query_desc}")
             print(f"{'='*80}\n")
