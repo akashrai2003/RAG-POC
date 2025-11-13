@@ -34,6 +34,10 @@ class ParallelAssetRAGAgent:
         """Process query with parallel execution."""
         start_time = time.time()
         
+        # Initialize token tracking
+        total_input_tokens = 0
+        total_output_tokens = 0
+        
         try:
             print(f"\n{'#'*80}")
             print(f"🚀 STARTING PARALLEL AGENT QUERY")
@@ -46,7 +50,10 @@ class ParallelAssetRAGAgent:
             print(f"{'='*80}")
             print(f"🤖 Asking OpenAI to analyze query and decide tools...")
             
-            tool_decision = await self._analyze_query(query_request.query)
+            tool_decision_result = await self._analyze_query(query_request.query)
+            tool_decision = tool_decision_result['decision']
+            total_input_tokens += tool_decision_result['input_tokens']
+            total_output_tokens += tool_decision_result['output_tokens']
             
             use_sql = tool_decision.get('use_sql', False)
             use_rag = tool_decision.get('use_rag', False)
@@ -99,6 +106,16 @@ class ParallelAssetRAGAgent:
                         rag_result = result
             
             print(f"✅ All tools executed")
+            
+            # Print RAG context that will be used for SQL query generation
+            if rag_result and rag_result.get('success'):
+                print(f"\n{'~'*80}")
+                print(f"📚 RAG CONTEXT FOR SQL GENERATION:")
+                print(f"{'~'*80}")
+                rag_response = rag_result.get('response', '')
+                print(f"{rag_response}")
+                print(f"{'~'*80}")
+            
             print(f"{'='*80}\n")
             
             # Step 3: Generate final response
@@ -107,11 +124,19 @@ class ParallelAssetRAGAgent:
             print(f"{'='*80}")
             print(f"🤖 Generating final answer with collected results...")
             
-            final_response = await self._generate_final_response(
+            final_response_result = await self._generate_final_response(
                 query_request.query,
                 sql_result,
                 rag_result
             )
+            final_response = final_response_result['response']
+            total_input_tokens += final_response_result['input_tokens']
+            total_output_tokens += final_response_result['output_tokens']
+            
+            # Calculate cost (gpt-4o-mini pricing)
+            input_cost = (total_input_tokens / 1_000_000) * 0.150
+            output_cost = (total_output_tokens / 1_000_000) * 0.600
+            total_cost = input_cost + output_cost
             
             execution_time = time.time() - start_time
             
@@ -124,6 +149,11 @@ class ParallelAssetRAGAgent:
             print(f"⏱️  Total Execution Time: {execution_time:.2f}s")
             print(f"🔧 Tools Used: {tools_used}")
             print(f"📊 Query Type: {query_type.upper()}")
+            print(f"💰 Token Usage:")
+            print(f"   🔹 Input tokens: {total_input_tokens:,}")
+            print(f"   🔹 Output tokens: {total_output_tokens:,}")
+            print(f"   🔹 Total tokens: {total_input_tokens + total_output_tokens:,}")
+            print(f"   🔹 Cost: ${total_cost:.6f} (Input: ${input_cost:.6f}, Output: ${output_cost:.6f})")
             print(f"{'#'*80}\n")
             
             return QueryResponse(
@@ -135,7 +165,18 @@ class ParallelAssetRAGAgent:
                 execution_time=execution_time,
                 metadata={
                     "tools_used": tools_used,
-                    "parallel_execution": True
+                    "parallel_execution": True,
+                    "token_usage": {
+                        "input_tokens": total_input_tokens,
+                        "output_tokens": total_output_tokens,
+                        "total_tokens": total_input_tokens + total_output_tokens
+                    },
+                    "cost": {
+                        "input_cost": input_cost,
+                        "output_cost": output_cost,
+                        "total_cost": total_cost,
+                        "currency": "USD"
+                    }
                 }
             )
         
@@ -156,7 +197,7 @@ class ParallelAssetRAGAgent:
             )
     
     async def _analyze_query(self, query: str) -> Dict[str, Any]:
-        """Analyze query and decide which tools to use."""
+        """Analyze query and decide which tools to use. Returns decision and token usage."""
         
         analysis_prompt = f"""
 You are an expert query analyzer for an asset tracking system. Analyze the user's query and decide which tools to use.
@@ -196,6 +237,10 @@ Respond with ONLY the JSON object, no other text.
         
         response = self.llm.invoke(analysis_prompt)
         response_text = response.content.strip()
+        print(response_text)
+        # Track token usage
+        input_tokens = response.response_metadata.get('token_usage', {}).get('prompt_tokens', 0)
+        output_tokens = response.response_metadata.get('token_usage', {}).get('completion_tokens', 0)
         
         # Extract JSON from response
         try:
@@ -216,7 +261,11 @@ Respond with ONLY the JSON object, no other text.
                     "rag_question": query
                 }
         
-        return decision
+        return {
+            'decision': decision,
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens
+        }
     
     def _execute_sql(self, query_description: str) -> Optional[Dict[str, Any]]:
         """Execute SQL query synchronously."""
@@ -253,8 +302,8 @@ Respond with ONLY the JSON object, no other text.
         original_query: str,
         sql_result: Optional[Dict[str, Any]],
         rag_result: Optional[Dict[str, Any]]
-    ) -> str:
-        """Generate final response using both SQL and RAG results."""
+    ) -> Dict[str, Any]:
+        """Generate final response using both SQL and RAG results. Returns response and token usage."""
         
         context_parts = []
         has_sql_data = False
@@ -353,4 +402,13 @@ Answer:
 """
         
         response = self.llm.invoke(final_prompt)
-        return response.content.strip()
+        
+        # Track token usage
+        input_tokens = response.response_metadata.get('token_usage', {}).get('prompt_tokens', 0)
+        output_tokens = response.response_metadata.get('token_usage', {}).get('completion_tokens', 0)
+        
+        return {
+            'response': response.content.strip(),
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens
+        }
