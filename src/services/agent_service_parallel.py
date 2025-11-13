@@ -44,85 +44,103 @@ class ParallelAssetRAGAgent:
             print(f"📝 User Query: {query_request.query}")
             print(f"{'#'*80}\n")
             
-            # Step 1: LLM analyzes query and decides which tools to use
+            # Step 1: Run Query Analysis + RAG in parallel (for lowest latency)
             print(f"{'='*80}")
-            print(f"🧠 STEP 1: Query Analysis")
+            print(f"🧠 STEP 1: Parallel Query Analysis + RAG Context Retrieval")
             print(f"{'='*80}")
-            print(f"🤖 Asking OpenAI to analyze query and decide tools...")
+            print(f"⚡ Launching query analysis and RAG search in parallel...")
             
-            tool_decision_result = await self._analyze_query(query_request.query)
+            # Execute both in parallel using ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                # Launch both tasks simultaneously
+                future_analysis = executor.submit(self._analyze_query_sync, query_request.query)
+                future_rag = executor.submit(self._execute_rag, query_request.query)
+                
+                # Wait for both to complete
+                tool_decision_result = future_analysis.result()
+                rag_result = future_rag.result()
+            
+            # Process analysis results
             tool_decision = tool_decision_result['decision']
             total_input_tokens += tool_decision_result['input_tokens']
             total_output_tokens += tool_decision_result['output_tokens']
+            
+            # Process RAG results
+            if rag_result and 'token_usage' in rag_result:
+                rag_tokens = rag_result['token_usage']
+                total_input_tokens += rag_tokens.get('input_tokens', 0)
+                total_output_tokens += rag_tokens.get('output_tokens', 0)
             
             use_sql = tool_decision.get('use_sql', False)
             use_rag = tool_decision.get('use_rag', False)
             sql_query_desc = tool_decision.get('sql_query', '')
             rag_question = tool_decision.get('rag_question', query_request.query)
             
-            # IMPORTANT: If SQL is needed, always include RAG for business context
-            if use_sql and not use_rag:
-                use_rag = True
-                # Use the SQL query description for RAG context if rag_question is empty
-                if not rag_question or rag_question.strip() == "":
-                    rag_question = sql_query_desc or query_request.query
-                print(f"ℹ️  Auto-enabling RAG to provide business context for SQL query")
-            
-            print(f"✅ Analysis complete:")
-            print(f"   🔹 Use SQL: {use_sql}")
-            print(f"   🔹 Use RAG: {use_rag} {'(auto-enabled for SQL context)' if use_sql else ''}")
+            # IMPORTANT: If SQL is needed, always use RAG for business context (we already have it!)
             if use_sql:
+                use_rag = True  # Always use RAG context for SQL
+                print(f"✅ Parallel execution complete:")
+                print(f"   🔹 Query analysis done")
+                print(f"   🔹 RAG context retrieved (will be used for SQL)")
+                print(f"   🔹 Use SQL: {use_sql}")
                 print(f"   🔹 SQL Query: {sql_query_desc}")
+            else:
+                print(f"✅ Analysis complete:")
+                print(f"   🔹 Use SQL: {use_sql}")
+                print(f"   🔹 Use RAG: {use_rag}")
             print(f"{'='*80}\n")
             
-            # Step 2: Execute tools in parallel
+            # Step 2: Execute SQL with RAG context (if needed)
             print(f"{'='*80}")
-            print(f"⚡ STEP 2: Parallel Tool Execution")
+            print(f"⚡ STEP 2: SQL Execution (with RAG context)")
             print(f"{'='*80}")
             
             sql_result = None
-            rag_result = None
             tools_used = []
             
-            # Execute in parallel using ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                futures = []
+            if use_sql:
+                # Use RAG context for SQL query generation
+                rag_context = rag_result.get('response', '') if rag_result and rag_result.get('success') else None
                 
-                if use_sql:
-                    print(f"🔧 Launching SQL query in parallel...")
-                    future_sql = executor.submit(self._execute_sql, sql_query_desc)
-                    futures.append(('sql', future_sql))
-                    tools_used.append('sql_query_tool')
+                if rag_context:
+                    print(f"🔧 Executing SQL query with RAG business context...")
+                    print(f"   📚 RAG context: {len(rag_context)} characters")
+                else:
+                    print(f"🔧 Executing SQL query (RAG context not available)...")
                 
-                if use_rag:
-                    print(f"🔧 Launching RAG query in parallel...")
-                    future_rag = executor.submit(self._execute_rag, rag_question)
-                    futures.append(('rag', future_rag))
-                    tools_used.append('rag_query_tool')
+                sql_result = self._execute_sql(sql_query_desc, rag_context)
                 
-                # Collect results
-                for tool_type, future in futures:
-                    result = future.result()
-                    if tool_type == 'sql':
-                        sql_result = result
-                        # Extract token usage from SQL service
-                        if result and 'token_usage' in result:
-                            sql_tokens = result['token_usage']
-                            total_input_tokens += sql_tokens.get('input_tokens', 0)
-                            total_output_tokens += sql_tokens.get('output_tokens', 0)
-                            print(f"   💰 SQL generation used: {sql_tokens.get('input_tokens', 0)} input, {sql_tokens.get('output_tokens', 0)} output tokens")
-                    else:
-                        rag_result = result
-                        # Extract token usage from RAG service
-                        if result and 'token_usage' in result:
-                            rag_tokens = result['token_usage']
-                            total_input_tokens += rag_tokens.get('input_tokens', 0)
-                            total_output_tokens += rag_tokens.get('output_tokens', 0)
-                            print(f"   💰 RAG generation used: {rag_tokens.get('input_tokens', 0)} input, {rag_tokens.get('output_tokens', 0)} output tokens")
+                if sql_result and 'token_usage' in sql_result:
+                    sql_tokens = sql_result['token_usage']
+                    total_input_tokens += sql_tokens.get('input_tokens', 0)
+                    total_output_tokens += sql_tokens.get('output_tokens', 0)
+                    print(f"   💰 SQL generation used: {sql_tokens.get('input_tokens', 0)} input, {sql_tokens.get('output_tokens', 0)} output tokens")
+                
+                tools_used.extend(['rag_query_tool', 'sql_query_tool'])
+            elif use_rag:
+                # RAG-only query (already executed in parallel)
+                tools_used.append('rag_query_tool')
+                print(f"✅ Using RAG result from parallel execution")
             
             print(f"✅ All tools executed")
+            print(f"{'='*80}\n")
+            
+            # Print RAG context summary (since it was already retrieved)
+            if rag_result and rag_result.get('success'):
+                print(f"\n{'~'*80}")
+                print(f"📚 RAG CONTEXT USED:")
+                print(f"{'~'*80}")
+                rag_response = rag_result.get('response', '')
+                # Show first 500 chars as preview
+                preview = rag_response[:500] + "..." if len(rag_response) > 500 else rag_response
+                print(f"{preview}")
+                print(f"   [Total: {len(rag_response)} characters]")
+                print(f"{'~'*80}")
             
             # Step 3: Generate final response
+            print(f"{'='*80}")
+            print(f"📝 STEP 3: Final Response Generation")
+            print(f"{'='*80}")
             print(f"🤖 Generating final answer with collected results...")
             
             final_response_result = await self._generate_final_response(
@@ -197,9 +215,8 @@ class ParallelAssetRAGAgent:
                 metadata={"error": str(e)}
             )
     
-    async def _analyze_query(self, query: str) -> Dict[str, Any]:
-        """Analyze query and decide which tools to use. Returns decision and token usage."""
-        
+    def _analyze_query_sync(self, query: str) -> Dict[str, Any]:
+        """Synchronous wrapper for query analysis (for parallel execution)."""
         analysis_prompt = f"""
 You are an expert query analyzer for an asset tracking system. Analyze the user's query and decide which tools to use.
 
@@ -267,10 +284,10 @@ Respond with ONLY the JSON object, no other text.
             'output_tokens': output_tokens
         }
     
-    def _execute_sql(self, query_description: str) -> Optional[Dict[str, Any]]:
-        """Execute SQL query synchronously."""
+    def _execute_sql(self, query_description: str, rag_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Execute SQL query synchronously with optional RAG context."""
         try:
-            result = self.sql_service.execute_natural_language_query(query_description)
+            result = self.sql_service.execute_natural_language_query(query_description, rag_context)
             if result and isinstance(result, dict):
                 # copy saql_query -> sql_query if missing
                 if 'saql_query' in result and 'sql_query' not in result:

@@ -153,15 +153,24 @@ class SQLService:
         rag_section = ""
         if rag_context:
             rag_section = f"""
-BUSINESS CONTEXT FROM DOCUMENTATION:
+═══════════════════════════════════════════════════════════════════════════════
+📚 BUSINESS CONTEXT FROM DOCUMENTATION (HIGHEST PRIORITY)
+═══════════════════════════════════════════════════════════════════════════════
 {rag_context}
 
-CRITICAL: Use this context to understand business logic, formulas and the correct column/field names to be used while writing the SAQL query.
-- If the context defines HOW something is calculated (formulas, conditions), implement that logic in SAQL
-- Don't just filter by status fields - implement the actual business rules
-- Example: "Rogue Asset" might be calculated based on date differences, not just a status field
+🔴 CRITICAL INSTRUCTIONS FOR USING THIS CONTEXT:
+1. The documentation context above contains the AUTHORITATIVE field names and business logic
+2. If this context mentions specific column/field names (e.g., "Total_Dwell_Days_CL__c"), 
+   YOU MUST use those EXACT field names in your SAQL query
+3. If the context explains HOW to calculate something (formulas, conditions), 
+   implement that EXACT logic in SAQL - don't just filter by status fields
+4. The business terms and definitions in this context OVERRIDE any default field mappings below
+5. Pay special attention to field names that look similar but have different meanings
+   (e.g., Total_Dwell_Days__c vs Total_Dwell_Days_CL__c)
 
-Map business terms to database columns AND their calculation logic.
+Example: If context says "Total Dwell Days In Transit (Total_Dwell_Days_CL__c)", 
+then for any "in transit" query, you MUST use Total_Dwell_Days_CL__c, NOT Total_Dwell_Days__c
+═══════════════════════════════════════════════════════════════════════════════
 
 """
         
@@ -171,10 +180,13 @@ Dataset: {self.dataset_id}/{self.dataset_version}
 {schema_info}
 
 {rag_section}Field Mappings:
-battery/voltage→Battery_Voltage__c, state/status→State_of_Pallet__c, location→Current_Location_Name__c, product→Product_Name__c, account→Account_Name__c, asset_id→Asset_ID__c, last_connected→Last_Connected__c, date_shipped→Date_Shipped__c, total_dwell_days/days_in_transit→Total_Dwell_Days__c, total_dwell_days/days_in_network → Total_Dwell_Days_CL__c
+battery/voltage→Battery_Voltage__c, state/status→State_of_Pallet__c, location→Current_Location_Name__c, product→Product_Name__c, account→Account_Name__c, asset_id→Asset_ID__c, last_connected→Last_Connected__c, date_shipped→Date_Shipped__c
 
-IMPORTANT: Total_Dwell_Days__c and Total_Dwell_Days_CL__c are pre-calculated fields that contain the number of days an asset has been in network and in transit respectively.
-Use this field when queries ask about "rogue" assets, "days in transit", or time-based asset status.
+CRITICAL DWELL TIME FIELDS (verify with RAG context if provided):
+- Total_Dwell_Days__c: Total days asset has been "In Network" (NOT in transit)
+- Total_Dwell_Days_CL__c: Total days asset has been "In Transit" (NOT in network)
+- ALWAYS refer to the RAG business context above for the CORRECT field to use
+- If RAG context specifies a different field name, USE THAT instead of these defaults
 
 User Request: {query_description}
 
