@@ -265,7 +265,7 @@ class RAGService:
             context = self._build_context(context_docs, metadatas, distances)
             
             # Generate response using LLM
-            print(f"🤖 Generating response using Gemini with context...")
+            print(f"🤖 Generating response using with context...")
             response, token_usage = self._generate_rag_response(question, context)
             
             # Calculate confidence score
