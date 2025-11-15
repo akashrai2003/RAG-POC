@@ -181,8 +181,6 @@ Dataset: {self.dataset_id}/{self.dataset_version}
 battery/voltage→Battery_Voltage__c, state/status→State_of_Pallet__c, location→Current_Location_Name__c, product→Product_Name__c, account→Account_Name__c, asset_id→Asset_ID__c, last_connected→Last_Connected__c, date_shipped→Date_Shipped__c
 
 CRITICAL DWELL TIME FIELDS (verify with RAG context if provided):
-- Total_Dwell_Days__c: Total days asset has been "In Network" (NOT in transit)
-- Total_Dwell_Days_CL__c: Total days asset has been "In Transit" (NOT in network)
 - ALWAYS refer to the RAG business context above for the CORRECT field to use
 - If RAG context specifies a different field name, USE THAT instead of these defaults
 
