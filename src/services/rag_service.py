@@ -375,7 +375,6 @@ Answer:
                 'file_path': metadata.get('file_path', '')
             }
             sources.append(source)
-        
         return sources
     
     def get_collection_stats(self) -> Dict[str, Any]:

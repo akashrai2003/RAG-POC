@@ -168,8 +168,6 @@ class SQLService:
 5. Pay special attention to field names that look similar but have different meanings
    (e.g., Total_Dwell_Days__c vs Total_Dwell_Days_CL__c)
 
-Example: If context says "Total Dwell Days In Transit (Total_Dwell_Days_CL__c)", 
-then for any "in transit" query, you MUST use Total_Dwell_Days_CL__c, NOT Total_Dwell_Days__c
 ═══════════════════════════════════════════════════════════════════════════════
 
 """
