@@ -329,22 +329,20 @@ Respond with ONLY the JSON object, no other text.
         if sql_result:
             if sql_result.get('success'):
                 sql_data = sql_result.get('data', [])
-                sql_query = sql_result.get('sql_query', '')
                 has_sql_data = True
                 context_parts.append(f"""
-SQL Query Results:
-- SQL Query: {sql_query}
+Database Results:
 - Rows returned: {len(sql_data)}
 - Data: {json.dumps(sql_data[:5], indent=2, default=str)}
 {"(showing first 5 of " + str(len(sql_data)) + " rows)" if len(sql_data) > 5 else ""}
 """)
             else:
                 # SQL query failed
-                sql_error = sql_result.get('error', 'Unknown SQL error')
+                sql_error = sql_result.get('error', 'Unknown error')
                 context_parts.append(f"""
-SQL Query Failed:
+Database Query Failed:
 - Error: {sql_error}
-- This likely means the query used incorrect column names or syntax
+- This likely means the requested data field doesn't exist or there's a data issue
 """)
         
         if rag_result:
@@ -367,20 +365,19 @@ You are an expert assistant for asset tracking queries.
 
 User's Question: "{original_query}"
 
-IMPORTANT: The SQL query encountered an error, likely due to incorrect column names or database issues.
+IMPORTANT: There was an issue retrieving the specific data from the database.
 
-Error Information:
-{sql_error}
+Error: {sql_error}
 
 {rag_context}
 
 Provide a helpful response that:
-1. Acknowledges that there was an issue retrieving the specific data
-2. Explains the error in simple terms (e.g., "column not found" means the database doesn't have that field)
-3. If RAG context is available, provide relevant general information
-4. Suggest rephrasing the query or checking available data fields
+1. Acknowledges the data retrieval issue in simple terms
+2. If RAG context is available, provide relevant general information from documentation
+3. Be concise and factual
 
-Be honest about the limitation but helpful in guiding the user.
+Do NOT mention SQL, queries, column names, or technical database details.
+Do NOT suggest asking further questions.
 
 Answer:
 """
@@ -393,11 +390,14 @@ User's Question: "{original_query}"
 Available Information:
 {context}
 
-Provide a clear, concise answer to the user's question based on the available information.
-- Summarize the SQL data findings clearly
+Provide a clear, concise answer based on the data:
+- Summarize key findings in plain language
 - State specific numbers and facts
-- If RAG context is available, incorporate relevant explanations
+- Incorporate relevant context if available
 - Be direct and factual
+
+Do NOT mention database queries, SQL, or technical implementation details.
+Do NOT suggest asking further questions.
 
 Answer:
 """
@@ -410,10 +410,12 @@ User's Question: "{original_query}"
 Available Information:
 {context}
 
-Provide a clear, concise answer to the user's question based on the available information.
+Provide a clear, concise answer based on available information:
 - Be helpful and informative
 - If limited data is available, state what you can provide
 - Be honest about limitations
+
+Do NOT suggest asking further questions.
 
 Answer:
 """
