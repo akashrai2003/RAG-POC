@@ -153,23 +153,26 @@ class SQLService:
         rag_section = ""
         if rag_context:
             rag_section = f"""
-═══════════════════════════════════════════════════════════════════════════════
-📚 BUSINESS CONTEXT FROM DOCUMENTATION (HIGHEST PRIORITY)
-═══════════════════════════════════════════════════════════════════════════════
+📚 BUSINESS CONTEXT FROM DOCUMENTATION
 {rag_context}
 
-🔴 CRITICAL INSTRUCTIONS FOR USING THIS CONTEXT:
-1. The documentation context above contains the AUTHORITATIVE field names and business logic
-2. If this context mentions specific column/field names (e.g., "Total_Dwell_Days_CL__c"), 
+## CRITICAL INSTRUCTIONS FOR USING THIS CONTEXT:
+## HOW TO USE THIS CONTEXT:
+- This context provides domain knowledge about field definitions, calculations, and business rules
+- Use it when the user's query relates to concepts explained in this context
+- For simple queries (e.g., "show assets with status X"), prefer standard field mappings unless the context provides a better approach
+- For complex queries (e.g., "show rogue assets", "calculate dwell time"), follow the business logic from this context
+- The context is a guide, not a mandate - use your judgment based on what the user is actually asking
+
+1. The documentation context above contains the field names and business logic
+2. If this context mentions specific column/field names, 
    YOU MUST use those EXACT field names in your SAQL query
 3. If the context explains HOW to calculate something (formulas, conditions), 
    implement that EXACT logic in SAQL - don't just filter by status fields
-4. The business terms and definitions in this context OVERRIDE any default field mappings below
+4. Don't just filter by status fields - implement the actual business rules
+    - Example: "Rogue Asset" might be calculated based on date differences, not just a status field
 5. Pay special attention to field names that look similar but have different meanings
    (e.g., Total_Dwell_Days__c vs Total_Dwell_Days_CL__c)
-
-═══════════════════════════════════════════════════════════════════════════════
-
 """
         
         prompt = f"""You are a SAQL expert which generates queries that are to be executed in Salesforce Einstein Analytics DB. Generate ONLY the SAQL query string, no explanations or markdown.
@@ -177,17 +180,17 @@ Today's date is {datetime.utcnow().strftime('%Y-%m-%d')}.
 Dataset: {self.dataset_id}/{self.dataset_version}
 {schema_info}
 
-{rag_section}Field Mappings:
+{rag_section}
+Field Mappings (Standard):
 battery/voltage→Battery_Voltage__c, state/status→State_of_Pallet__c, location→Current_Location_Name__c, product→Product_Name__c, account→Account_Name__c, asset_id→Asset_ID__c, last_connected→Last_Connected__c, date_shipped→Date_Shipped__c
 
-CRITICAL DWELL TIME FIELDS (verify with RAG context if provided):
-- ALWAYS refer to the RAG business context above for the CORRECT field to use
-- If RAG context specifies a different field name, USE THAT instead of these defaults
+Common Status Values: "In Transit", "In Network", "Delivered", "Returned"
 
 User Request: {query_description}
 
-IMPORTANT: If the Business Context above defines HOW to calculate something (like "Rogue Asset = days in transit >= limit"), 
-implement that calculation logic in SAQL instead of just filtering by a status field.
+IMPORTANT: Analyze the user's request carefully:
+- For straightforward queries about asset status/attributes, use the standard field mappings
+- For queries about business metrics, calculations, or domain-specific concepts, refer to the business context above
         
         CRITICAL RULES for SAQL:
         - Ensure not to use SQL syntax, only SAQL. like 'load', 'filter', 'foreach', 'limit', 'date_add.

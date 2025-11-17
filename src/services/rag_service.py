@@ -38,7 +38,7 @@ class RAGService:
         
         # Initialize text splitter for PDFs
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1500,  # Larger chunks for PDF content
+            chunk_size=1000,  # Larger chunks for PDF content
             chunk_overlap=300,  # More overlap for context preservation
             length_function=len,
             separators=["\n\n", "\n", ". ", " ", ""]
