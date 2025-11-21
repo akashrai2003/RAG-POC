@@ -327,7 +327,9 @@ Context Information (from PDF documents):
 User Question: {question}
 
 Instructions:
-- Take care of column names and specific terminology used in the context as there might be very subtle distinctions.
+- If the question asks about calculations, metrics, or data queries, START your response by clearly stating the exact field/column names needed (e.g., "Use field: Total_Dwell_Days_CL__c for calculating..."). This helps SQL query generation.
+- For simple definition questions, provide a direct answer without field names.
+- Pay careful attention to column names and terminology - there may be subtle but important distinctions (e.g., Total_Dwell_Days__c vs Total_Dwell_Days_CL__c).
 - Provide a clear, detailed answer based ONLY on the information in the context
 - Cite the source documents when providing information (e.g., "According to [Source Name]...")
 - If the context doesn't contain enough information, clearly state what's missing
