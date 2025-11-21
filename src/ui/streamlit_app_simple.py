@@ -14,7 +14,7 @@ from config.settings import config
 from services.sql_service import SQLService
 from services.rag_service import RAGService
 from services.data_service import DataProcessingService
-from services.agent_service import SmartAssetRAGAgent
+from services.agent_service_parallel import ParallelAssetRAGAgent
 from models.schemas import QueryRequest
 
 
@@ -67,11 +67,11 @@ class SimpleAssetRAGInterface:
                     )
                     print("Data Service initialized")
                     
-                    st.session_state.agent = SmartAssetRAGAgent(
+                    st.session_state.agent = ParallelAssetRAGAgent(
                         st.session_state.sql_service,
                         st.session_state.rag_service
                     )
-                    print("Smart Agent initialized (with tool calling)")
+                    print("Agent initialized (fast execution)")
                     
                     # Note: Business context is now loaded from PDFs, not hard-coded
                     # st.session_state.rag_service.add_business_context()
@@ -99,7 +99,7 @@ class SimpleAssetRAGInterface:
         with col1:
             st.info("🔗 Connected to Salesforce Einstein Data Cloud - querying live data directly!")
         with col2:
-            st.success("⚡ Smart Routing: 1-2 LLM calls per query")
+            st.success("⚡ Parallel Execution: Fast query processing")
         
         # Single tab: Query only (upload managed in Salesforce)
         self.render_query_interface()
@@ -113,7 +113,7 @@ class SimpleAssetRAGInterface:
             col1, col2 = st.columns(2)
             
             with col1:
-                st.markdown("**📊 Data Queries** *(2 LLM calls)*")
+                st.markdown("**📊 Data Queries**")
                 st.markdown("""
                 - Show assets with battery voltage less than 6
                 - Count assets by state
@@ -123,7 +123,7 @@ class SimpleAssetRAGInterface:
                 """)
             
             with col2:
-                st.markdown("**📚 Documentation Queries** *(1 LLM call)*")
+                st.markdown("**📚 Documentation Queries**")
                 st.markdown("""
                 - What is a Cardinal Tag?
                 - Explain the "In Transit" state
@@ -139,6 +139,16 @@ class SimpleAssetRAGInterface:
             placeholder="e.g., Show assets with battery voltage less than 6"
         )
         
+        # Optional account filter
+        with st.expander("🔐 Advanced: Account Filtering (Optional)"):
+            account_id = st.text_input(
+                "Salesforce Account ID",
+                placeholder="e.g., 001xx000003DGbQAAW",
+                help="Filter results to a specific Salesforce account. Leave empty to query all accounts."
+            )
+            if account_id:
+                st.info(f"Results will be filtered to Account ID: {account_id}")
+        
         col1, col2 = st.columns([1, 5])
         with col1:
             execute_btn = st.button("Execute Query", type="primary", use_container_width=True)
@@ -147,29 +157,34 @@ class SimpleAssetRAGInterface:
                 st.rerun()
         
         if execute_btn and query:
+            # Get account_id if it was entered, otherwise None
+            filter_account_id = account_id.strip() if 'account_id' in locals() and account_id else None
+            
             with st.spinner("Processing query..."):
                 try:
-                    # Create query request
-                    query_request = QueryRequest(query=query)
+                    # Create query request with optional account filter
+                    query_request = QueryRequest(
+                        query=query,
+                        account_id=filter_account_id
+                    )
                     
                     # Execute query
                     response = asyncio.run(st.session_state.agent.query(query_request))
                     
                     if response.success:
-                        # Show completion with smart routing info
-                        llm_calls = response.metadata.get('llm_calls', 'N/A')
+                        # Show completion metrics
                         query_type = response.query_type
                         
                         # Create status message based on query type
                         if query_type == "rag":
                             status_icon = "📚"
-                            status_text = f"Documentation query • {llm_calls} LLM call"
-                        elif query_type == "data":
+                            status_text = "Documentation query"
+                        elif query_type == "sql":
                             status_icon = "📊"
-                            status_text = f"Data query • {llm_calls} LLM calls"
+                            status_text = "Data query"
                         else:
                             status_icon = "🔄"
-                            status_text = f"Hybrid query • {llm_calls} LLM calls"
+                            status_text = "Hybrid query"
                         
                         col1, col2 = st.columns([3, 1])
                         with col1:
@@ -177,15 +192,15 @@ class SimpleAssetRAGInterface:
                         with col2:
                             st.metric("Time", f"{response.execution_time:.2f}s")
                         
+                        # Show account filter indicator
+                        if filter_account_id:
+                            st.caption(f"🔐 Filtered by Account: {filter_account_id}")
+                        
                         # Show answer in a clean format
                         st.markdown("### Answer")
                         st.write(response.response)
                         
-                        # Show source citations if available
-                        if response.metadata.get('rag_sources', 0) > 0:
-                            st.caption(f"📖 {response.metadata['rag_sources']} documentation sources used")
-                        
-                        # Optionally show data table if available (without revealing it's SQL)
+                        # Optionally show data table if available
                         if response.data and len(response.data) > 0:
                             with st.expander(f"📋 View Detailed Results ({len(response.data)} records)"):
                                 df = pd.DataFrame(response.data)
