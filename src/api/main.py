@@ -23,6 +23,7 @@ from models.schemas import QueryRequest, QueryResponse
 class QueryApiRequest(BaseModel):
     """API request model for queries."""
     query: str
+    account_id: Optional[str] = None  # Filter results by Salesforce Account ID
     include_metadata: bool = True
 
 
@@ -156,7 +157,10 @@ async def query_assets(request: QueryApiRequest):
         print(f"{'='*80}")
         
         # Create internal query request
-        query_request = QueryRequest(query=request.query)
+        query_request = QueryRequest(
+            query=request.query,
+            account_id=request.account_id
+        )
         
         # Execute query using the parallel agent
         response = await agent.query(query_request)

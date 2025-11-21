@@ -284,10 +284,10 @@ Respond with ONLY the JSON object, no other text.
             'output_tokens': output_tokens
         }
     
-    def _execute_sql(self, query_description: str, rag_context: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Execute SQL query synchronously with optional RAG context."""
+    def _execute_sql(self, query_description: str, rag_context: Optional[str] = None, account_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Execute SQL query synchronously with optional RAG context and account filter."""
         try:
-            result = self.sql_service.execute_natural_language_query(query_description, rag_context)
+            result = self.sql_service.execute_natural_language_query(query_description, rag_context, account_id)
             if result and isinstance(result, dict):
                 # copy saql_query -> sql_query if missing
                 if 'saql_query' in result and 'sql_query' not in result:

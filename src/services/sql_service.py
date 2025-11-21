@@ -96,7 +96,7 @@ class SQLService:
         print(f"✅ Successfully authenticated with Salesforce")
         return self._access_token
     
-    def execute_natural_language_query(self, query_description: str, rag_context: Optional[str] = None) -> Dict[str, Any]:
+    def execute_natural_language_query(self, query_description: str, rag_context: Optional[str] = None, account_id: Optional[str] = None) -> Dict[str, Any]:
         """Convert natural language query to SQL and execute."""
         try:
             print(f"\n{'='*80}")
@@ -104,13 +104,17 @@ class SQLService:
             print(f"📝 Query: {query_description}")
             if rag_context:
                 print(f"📚 RAG Context: Provided ({len(rag_context)} chars)")
+            if account_id:
+                print(f"🔐 Account Filter: {account_id}")
             print(f"{'='*80}")
             
             # Get database schema
             schema_info = self._get_schema_info()
+            print("schema_info:", schema_info)
+
             # Generate SAQL query using LLM (with optional RAG context)
             print(f"🤖 Generating SAQL query using LLM...")
-            saql_result = self._generate_saql_query(query_description, schema_info, rag_context)
+            saql_result = self._generate_saql_query(query_description, schema_info, rag_context, account_id)
 
             if not saql_result or saql_result[0] is None:
                 print(f"❌ Failed to generate SAQL query")
@@ -146,8 +150,21 @@ class SQLService:
                 'error': str(e)
             }
     
-    def _generate_saql_query(self, query_description: str, schema_info: str, rag_context: Optional[str] = None) -> Optional[str]:
+    def _generate_saql_query(self, query_description: str, schema_info: str, rag_context: Optional[str] = None, account_id: Optional[str] = None) -> Optional[str]:
         """Generate SAQL query from natural language description."""
+        
+        # Add account filter instruction if provided
+        account_filter_instruction = ""
+        if account_id:
+            account_filter_instruction = f"""
+🔐 CRITICAL ACCOUNT FILTER (MANDATORY):
+You MUST filter by AccountId == "{account_id}" in EVERY query.
+This filter must be applied BEFORE any other filters.
+Pattern: q = load "..."; q = filter q by AccountId == "{account_id}"; [then add other filters/operations]
+
+Example with account filter:
+q = load "dataset/version"; q = filter q by AccountId == "{account_id}" && Battery_Voltage__c < 6; q = foreach q generate Asset_ID__c, Battery_Voltage__c; q = limit q 100;
+"""
         
         # Add RAG context section if provided
         rag_section = ""
@@ -180,6 +197,7 @@ Today's date is {datetime.utcnow().strftime('%Y-%m-%d')}.
 Dataset: {self.dataset_id}/{self.dataset_version}
 {schema_info}
 
+{account_filter_instruction}
 {rag_section}
 Field Mappings (Standard):
 battery/voltage→Battery_Voltage__c, state/status→State_of_Pallet__c, location→Current_Location_Name__c, product→Product_Name__c, account→Account_Name__c, asset_id→Asset_ID__c, last_connected→Last_Connected__c, date_shipped→Date_Shipped__c
