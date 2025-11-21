@@ -37,6 +37,7 @@ class QueryRequest(BaseModel):
     """Model for user query requests."""
     
     query: str = Field(..., min_length=1, max_length=500, description="User query")
+    account_id: Optional[str] = Field(None, description="Salesforce Account ID for filtering")
     query_type: Optional[str] = Field(None, description="Detected query type (sql/rag)")
     context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional context")
     
