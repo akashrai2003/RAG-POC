@@ -10,7 +10,9 @@ from langchain_openai import ChatOpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredPDFLoader
 from langchain_community.document_loaders import Docx2txtLoader
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, BinaryIO
+import tempfile
+import shutil
 import json
 import os
 from pathlib import Path
@@ -518,6 +520,145 @@ Answer:
             return load_result
             
         except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
+    
+    def load_pdf_from_bytes(self, file_content: bytes, filename: str) -> Dict[str, Any]:
+        """Load a single PDF from bytes (uploaded file) into the vector store."""
+        temp_file = None
+        temp_path = None
+        try:
+            # Create temporary file
+            with tempfile.NamedTemporaryFile(mode='wb', suffix='.pdf', delete=False) as temp_file:
+                temp_file.write(file_content)
+                temp_path = temp_file.name
+            
+            print(f"\n📖 Processing uploaded PDF: {filename}")
+            
+            # Load PDF from temporary file
+            loader = PyPDFLoader(temp_path)
+            pages = loader.load()
+            
+            documents = []
+            metadatas = []
+            ids = []
+            
+            file_stem = Path(filename).stem
+            
+            # Process each page
+            for page_num, page in enumerate(pages):
+                chunks = self.text_splitter.split_text(page.page_content)
+                
+                for chunk_num, chunk in enumerate(chunks):
+                    if len(chunk.strip()) < 50:
+                        continue
+                    
+                    documents.append(chunk)
+                    metadatas.append({
+                        'source': filename,
+                        'file_path': f'uploaded/{filename}',
+                        'page': page_num + 1,
+                        'chunk': chunk_num,
+                        'type': 'pdf',
+                        'total_pages': len(pages)
+                    })
+                    ids.append(f"{file_stem}_page{page_num + 1}_chunk{chunk_num}")
+            
+            # Add to ChromaDB
+            if documents:
+                self.collection.add(
+                    documents=documents,
+                    metadatas=metadatas,
+                    ids=ids
+                )
+                print(f"✅ Loaded {len(pages)} pages, created {len(documents)} chunks")
+            
+            return {
+                'success': True,
+                'filename': filename,
+                'pages_loaded': len(pages),
+                'chunks_created': len(documents)
+            }
+            
+        except Exception as e:
+            print(f"❌ Error loading {filename}: {str(e)}")
+            return {
+                'success': False,
+                'filename': filename,
+                'error': str(e)
+            }
+        finally:
+            # Clean up temporary file
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except Exception as e:
+                    print(f"⚠️  Could not delete temp file: {str(e)}")
+    
+    def load_multiple_pdfs_from_bytes(self, files: List[tuple], clear_db: bool = False) -> Dict[str, Any]:
+        """Load multiple PDF files from uploaded bytes.
+        
+        Args:
+            files: List of tuples (file_content: bytes, filename: str)
+            clear_db: If True, clear existing data before loading new files
+        
+        Returns:
+            Dictionary with success status and processing details
+        """
+        try:
+            print(f"\n{'='*80}")
+            print(f"📚 Processing {len(files)} uploaded PDF file(s)")
+            print(f"🗑️  Clear database: {clear_db}")
+            print(f"{'='*80}")
+            
+            # Clear database if requested
+            if clear_db:
+                print("\n🗑️  Clearing existing data...")
+                clear_result = self.clear_all_data()
+                if not clear_result['success']:
+                    return clear_result
+            
+            # Process each file
+            results = []
+            total_chunks = 0
+            successful_files = 0
+            failed_files = []
+            
+            for file_content, filename in files:
+                result = self.load_pdf_from_bytes(file_content, filename)
+                results.append(result)
+                
+                if result['success']:
+                    successful_files += 1
+                    total_chunks += result['chunks_created']
+                else:
+                    failed_files.append({
+                        'filename': filename,
+                        'error': result.get('error', 'Unknown error')
+                    })
+            
+            print(f"\n{'='*80}")
+            print(f"✅ Processing complete")
+            print(f"   • Files processed: {successful_files}/{len(files)}")
+            print(f"   • Total chunks created: {total_chunks}")
+            if failed_files:
+                print(f"   ⚠️  Failed files: {len(failed_files)}")
+            print(f"{'='*80}\n")
+            
+            return {
+                'success': True,
+                'files_processed': successful_files,
+                'total_files': len(files),
+                'total_chunks': total_chunks,
+                'database_cleared': clear_db,
+                'failed_files': failed_files,
+                'details': results
+            }
+            
+        except Exception as e:
+            print(f"❌ Error processing uploaded files: {str(e)}")
             return {
                 'success': False,
                 'error': str(e)

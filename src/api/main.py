@@ -3,7 +3,7 @@ FastAPI REST API for Asset RAG system.
 Provides query endpoints to replace Streamlit interface.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -45,6 +45,18 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: str
     services: Dict[str, str]
+
+
+class UploadResponse(BaseModel):
+    """Response model for PDF upload endpoint."""
+    success: bool
+    files_processed: int
+    total_files: int
+    total_chunks: int
+    database_cleared: bool
+    failed_files: List[Dict[str, str]]
+    timestamp: str
+    message: str
 
 
 # Initialize FastAPI app
@@ -260,6 +272,80 @@ async def get_system_stats():
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+@app.post("/upload", response_model=UploadResponse)
+async def upload_pdfs(
+    files: List[UploadFile] = File(..., description="PDF files to upload"),
+    clear_db: bool = Form(default=False, description="Clear existing database before uploading")
+):
+    """
+    Upload PDF files to the RAG system for indexing.
+    
+    Args:
+        files: List of PDF files to upload
+        clear_db: If True, clear existing data before loading new files (default: False)
+    
+    Returns:
+        Upload status with processing details
+    """
+    if not rag_service:
+        raise HTTPException(status_code=503, detail="RAG service not initialized")
+    
+    try:
+        print(f"\n{'='*80}")
+        print(f"📤 PDF UPLOAD REQUEST")
+        print(f"Files: {len(files)}")
+        print(f"Clear DB: {clear_db}")
+        print(f"{'='*80}")
+        
+        # Validate that all files are PDFs
+        pdf_files = []
+        for file in files:
+            if not file.filename.lower().endswith('.pdf'):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File {file.filename} is not a PDF. Only PDF files are supported."
+                )
+            
+            # Read file content
+            content = await file.read()
+            pdf_files.append((content, file.filename))
+        
+        # Process uploaded files using RAG service
+        result = rag_service.load_multiple_pdfs_from_bytes(pdf_files, clear_db=clear_db)
+        
+        if not result['success']:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to process PDFs: {result.get('error', 'Unknown error')}"
+            )
+        
+        # Prepare response
+        response = UploadResponse(
+            success=True,
+            files_processed=result['files_processed'],
+            total_files=result['total_files'],
+            total_chunks=result['total_chunks'],
+            database_cleared=result['database_cleared'],
+            failed_files=result.get('failed_files', []),
+            timestamp=datetime.now().isoformat(),
+            message=f"Successfully processed {result['files_processed']}/{result['total_files']} files"
+        )
+        
+        print(f"✅ Upload completed successfully")
+        print(f"📊 Files: {result['files_processed']}/{result['total_files']}")
+        print(f"📚 Chunks created: {result['total_chunks']}")
+        print(f"{'='*80}\n")
+        
+        return response
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Upload failed: {str(e)}")
+        print(f"{'='*80}\n")
+        raise HTTPException(status_code=500, detail=f"Error uploading PDFs: {str(e)}")
 
 
 if __name__ == "__main__":
