@@ -101,8 +101,14 @@ class SimpleAssetRAGInterface:
         with col2:
             st.success("⚡ Parallel Execution: Fast query processing")
         
-        # Single tab: Query only (upload managed in Salesforce)
-        self.render_query_interface()
+        # Tabs for Query and Upload
+        tab1, tab2 = st.tabs(["🔍 Query", "📚 Upload PDFs"])
+        
+        with tab1:
+            self.render_query_interface()
+        
+        with tab2:
+            self.render_pdf_upload_interface()
     
     def render_query_interface(self):
         """Render the query interface."""
@@ -212,6 +218,120 @@ class SimpleAssetRAGInterface:
                 except Exception as e:
                     st.error("An error occurred while processing your query.")
                     print(f"UI Error: {str(e)}")
+    
+    def render_pdf_upload_interface(self):
+        """Render the PDF upload interface for RAG knowledge base."""
+        st.subheader("Upload PDF Documents to Knowledge Base")
+        
+        # Show current stats
+        with st.expander("📊 Current Knowledge Base Stats"):
+            try:
+                stats = st.session_state.rag_service.get_collection_stats()
+                if 'error' not in stats:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Total Chunks", stats.get('total_chunks', 0))
+                    with col2:
+                        st.metric("Unique Documents", stats.get('unique_documents', 0))
+                    
+                    if stats.get('source_files'):
+                        st.write("**Loaded Documents:**")
+                        for file_name in stats['source_files']:
+                            st.text(f"• {file_name}")
+                else:
+                    st.error(f"Error loading stats: {stats['error']}")
+            except Exception as e:
+                st.error(f"Error loading stats: {str(e)}")
+        
+        st.markdown("---")
+        
+        # File uploader
+        uploaded_files = st.file_uploader(
+            "Choose PDF files",
+            type=['pdf'],
+            accept_multiple_files=True,
+            help="Upload PDF documents to add to the knowledge base",
+            key="pdf_uploader"
+        )
+        
+        if uploaded_files:
+            st.info(f"📄 Selected {len(uploaded_files)} file(s)")
+            
+            # Show selected files
+            with st.expander("📋 Selected Files"):
+                for file in uploaded_files:
+                    st.text(f"• {file.name} ({file.size / 1024:.1f} KB)")
+            
+            st.markdown("---")
+            
+            # Upload mode selection
+            clear_db = st.checkbox(
+                "🗑️ Clear existing knowledge base before uploading",
+                value=False,
+                help="If checked, all existing PDF chunks will be removed before adding new files. If unchecked, new files will be added/updated."
+            )
+            
+            if clear_db:
+                st.warning("⚠️ This will remove all existing PDF chunks from the knowledge base!")
+            else:
+                st.info("ℹ️ Files with the same name will be updated. New files will be added.")
+            
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                process_btn = st.button("Upload PDFs", type="primary", use_container_width=True)
+            
+            if process_btn:
+                with st.spinner("Processing PDF files..."):
+                    try:
+                        print("\n" + "="*80)
+                        print(f"UPLOADING {len(uploaded_files)} PDF FILES")
+                        print(f"Clear DB: {clear_db}")
+                        print("="*80)
+                        
+                        # Prepare files for processing
+                        files_data = []
+                        for uploaded_file in uploaded_files:
+                            content = uploaded_file.read()
+                            files_data.append((content, uploaded_file.name))
+                            uploaded_file.seek(0)  # Reset file pointer
+                        
+                        # Process files using RAG service
+                        result = st.session_state.rag_service.load_multiple_pdfs_from_bytes(
+                            files_data,
+                            clear_db=clear_db
+                        )
+                        
+                        if result['success']:
+                            st.success(f"✅ Successfully processed {result['files_processed']}/{result['total_files']} files")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("Files Processed", f"{result['files_processed']}/{result['total_files']}")
+                            with col2:
+                                st.metric("Chunks Created", result['total_chunks'])
+                            
+                            # Show failed files if any
+                            if result.get('failed_files'):
+                                with st.expander("⚠️ Failed Files"):
+                                    for failed in result['failed_files']:
+                                        st.error(f"**{failed['filename']}**: {failed['error']}")
+                            
+                            # Show updated stats
+                            st.markdown("---")
+                            st.markdown("**Updated Knowledge Base:**")
+                            stats = st.session_state.rag_service.get_collection_stats()
+                            if 'error' not in stats:
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.metric("Total Chunks", stats.get('total_chunks', 0))
+                                with col2:
+                                    st.metric("Unique Documents", stats.get('unique_documents', 0))
+                        else:
+                            st.error(f"Upload failed: {result.get('error', 'Unknown error')}")
+                    
+                    except Exception as e:
+                        st.error(f"Error uploading PDFs: {str(e)}")
+                        print(f"PDF Upload Error: {str(e)}")
     
     def render_upload_interface(self):
         """Render the data upload interface."""

@@ -110,7 +110,6 @@ class SQLService:
             
             # Get database schema
             schema_info = self._get_schema_info()
-            print("schema_info:", schema_info)
 
             # Generate SAQL query using LLM (with optional RAG context)
             print(f"🤖 Generating SAQL query using LLM...")
@@ -157,13 +156,25 @@ class SQLService:
         account_filter_instruction = ""
         if account_id:
             account_filter_instruction = f"""
-🔐 CRITICAL ACCOUNT FILTER (MANDATORY):
-You MUST filter by AccountId == "{account_id}" in EVERY query.
-This filter must be applied BEFORE any other filters.
-Pattern: q = load "..."; q = filter q by AccountId == "{account_id}"; [then add other filters/operations]
+⚠️  ⚠️  ⚠️  CRITICAL ACCOUNT FILTER (HIGHEST PRIORITY - MANDATORY) ⚠️  ⚠️  ⚠️ 
 
-Example with account filter:
-q = load "dataset/version"; q = filter q by AccountId == "{account_id}" && Battery_Voltage__c < 6; q = foreach q generate Asset_ID__c, Battery_Voltage__c; q = limit q 100;
+YOU MUST APPLY THIS FILTER TO EVERY QUERY - NO EXCEPTIONS:
+    AccountId == "{account_id}"
+
+MANDATORY PATTERN - ALWAYS USE THIS:
+    q = load "..."; 
+    q = filter q by AccountId == "{account_id}";  ← THIS LINE IS MANDATORY
+    [then add any other filters or operations]
+
+If the user asks for other filters (e.g., voltage < 6), combine them with &&:
+    q = filter q by AccountId == "{account_id}" && Battery_Voltage__c < 6;
+
+EXAMPLES WITH ACCOUNT FILTER (AccountId == "{account_id}"):
+1. Simple filter: q = load "..."; q = filter q by AccountId == "{account_id}" && Battery_Voltage__c < 6; q = foreach q generate Asset_ID__c, Battery_Voltage__c; q = limit q 100;
+2. Count query: q = load "..."; q = filter q by AccountId == "{account_id}"; q = foreach q generate count() as 'Count';
+3. Group by: q = load "..."; q = filter q by AccountId == "{account_id}"; q = group q by State_of_Pallet__c; q = foreach q generate State_of_Pallet__c, count() as 'Count';
+
+⚠️  FAILURE TO INCLUDE "AccountId == \"{account_id}\"" IN THE FILTER WILL RETURN INCORRECT RESULTS ⚠️
 """
         
         # Add RAG context section if provided
@@ -198,6 +209,7 @@ Dataset: {self.dataset_id}/{self.dataset_version}
 {schema_info}
 
 {account_filter_instruction}
+
 {rag_section}
 Field Mappings (Standard):
 battery/voltage→Battery_Voltage__c, state/status→State_of_Pallet__c, location→Current_Location_Name__c, product→Product_Name__c, account→Account_Name__c, asset_id→Asset_ID__c, last_connected→Last_Connected__c, date_shipped→Date_Shipped__c

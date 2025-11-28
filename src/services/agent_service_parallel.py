@@ -42,6 +42,8 @@ class ParallelAssetRAGAgent:
             print(f"\n{'#'*80}")
             print(f"🚀 STARTING PARALLEL AGENT QUERY")
             print(f"📝 User Query: {query_request.query}")
+            if query_request.account_id:
+                print(f"🔐 Account Filter: {query_request.account_id}")
             print(f"{'#'*80}\n")
             
             # Step 1: Run Query Analysis + RAG in parallel (for lowest latency)
@@ -108,7 +110,10 @@ class ParallelAssetRAGAgent:
                 else:
                     print(f"🔧 Executing SQL query (RAG context not available)...")
                 
-                sql_result = self._execute_sql(sql_query_desc, rag_context)
+                if query_request.account_id:
+                    print(f"   🔐 Applying account filter: {query_request.account_id}")
+                
+                sql_result = self._execute_sql(sql_query_desc, rag_context, query_request.account_id)
                 
                 if sql_result and 'token_usage' in sql_result:
                     sql_tokens = sql_result['token_usage']
