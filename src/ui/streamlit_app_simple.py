@@ -178,6 +178,9 @@ class SimpleAssetRAGInterface:
                     response = asyncio.run(st.session_state.agent.query(query_request))
                     
                     if response.success:
+                        # Apply post-processing filter to data
+                        filtered_data = _filter_response_data(response.data) if response.data else None
+                        
                         # Show completion metrics
                         query_type = response.query_type
                         
@@ -207,9 +210,9 @@ class SimpleAssetRAGInterface:
                         st.write(response.response)
                         
                         # Optionally show data table if available
-                        if response.data and len(response.data) > 0:
-                            with st.expander(f"📋 View Detailed Results ({len(response.data)} records)"):
-                                df = pd.DataFrame(response.data)
+                        if filtered_data and len(filtered_data) > 0:
+                            with st.expander(f"📋 View Detailed Results ({len(filtered_data)} records)"):
+                                df = pd.DataFrame(filtered_data)
                                 st.dataframe(df, use_container_width=True, hide_index=True)
                     
                     else:
@@ -409,6 +412,84 @@ class SimpleAssetRAGInterface:
         except Exception as e:
             print(f"❌ Error clearing databases: {str(e)}")
             raise
+
+
+def _filter_response_data(data):
+    """
+    Filter out redundant count-only data that should not be shown in UI tables.
+    
+    Logic:
+    - If all rows have identical values AND only count-type columns exist -> filter out
+    - If it's grouped data (count per category) -> keep it (useful aggregation)
+    - If mixed data types -> keep it
+    
+    Returns None if data should be filtered out, otherwise returns the data.
+    """
+    if not data or len(data) == 0:
+        return data
+    
+    # Check if this looks like redundant count data
+    if _is_redundant_count_data(data):
+        print(f"🚫 Filtering out redundant count data ({len(data)} identical rows)")
+        return None
+    
+    return data
+
+
+def _is_redundant_count_data(data):
+    """
+    Detect if data consists of redundant count rows that add no value.
+    Optimized for large datasets - uses sampling and early exit.
+    
+    Criteria for filtering:
+    1. All rows are identical AND
+    2. Only contains count-type columns AND  
+    3. All count values are 1 (indicating row-level counts, not aggregations)
+    """
+    if len(data) < 2:  # Single row or empty - don't filter
+        return False
+    
+    first_row = data[0]
+    
+    # Early exit: Check if only count-type columns exist (fast check)
+    count_columns = [col for col in first_row.keys() 
+                    if any(keyword in col.lower() 
+                          for keyword in ['count', 'total', 'sum', 'avg', 'average', 'min', 'max'])]
+    
+    if len(count_columns) != len(first_row):
+        return False  # Has non-count columns - keep the data
+    
+    # Early exit: Check if all count values are 1 in first row
+    for col in count_columns:
+        value = first_row[col]
+        if not (isinstance(value, (int, float)) and value == 1):
+            return False  # Not a redundant count of 1 - keep the data
+    
+    # For large datasets, use sampling instead of checking every row
+    if len(data) > 1000:
+        # Sample check: Check first 100, middle 50, and last 50 rows
+        sample_indices = (
+            list(range(min(100, len(data)))) +  # First 100
+            list(range(len(data)//2 - 25, len(data)//2 + 25)) +  # Middle 50
+            list(range(max(0, len(data) - 50), len(data)))  # Last 50
+        )
+        # Remove duplicates and limit
+        sample_indices = list(set(sample_indices))[:200]
+        
+        # Check sampled rows for identical structure
+        for i in sample_indices:
+            if data[i] != first_row:
+                return False  # Sample shows variation - keep the data
+        
+        print(f"🔍 Large dataset detected ({len(data)} rows) - used sampling for redundancy check")
+    else:
+        # Small dataset - check all rows (but with early exit)
+        for i in range(1, min(len(data), 1000)):  # Cap at 1000 for safety
+            if data[i] != first_row:
+                return False  # Rows differ - keep the data
+    
+    # All criteria met - this is redundant count data
+    return True
 
 
 def main():
