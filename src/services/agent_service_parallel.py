@@ -335,11 +335,15 @@ Respond with ONLY the JSON object, no other text.
             if sql_result.get('success'):
                 sql_data = sql_result.get('data', [])
                 has_sql_data = True
+                
+                # Format sample data - show 1 example for structure, emphasize total count
+                sample_note = ""
+                if len(sql_data) > 0:
+                    sample_note = f"\n- Sample record (1 of {len(sql_data)} total): {json.dumps(sql_data[0], indent=2, default=str)}"
+                
                 context_parts.append(f"""
 Database Results:
-- Rows returned: {len(sql_data)}
-- Data: {json.dumps(sql_data[:5], indent=2, default=str)}
-{"(showing first 5 of " + str(len(sql_data)) + " rows)" if len(sql_data) > 5 else ""}
+- TOTAL ROWS RETURNED: {len(sql_data)}{sample_note}
 """)
             else:
                 # SQL query failed

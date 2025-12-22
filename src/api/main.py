@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Any
 import asyncio
 import time
 from datetime import datetime
+import re
 
 # Import our services
 from config.settings import config
@@ -355,22 +356,54 @@ def _filter_response_data(data: List[Dict[str, Any]]) -> Optional[List[Dict[str,
     """
     Filter out redundant count-only data that should not be shown in UI tables.
     
-    Logic:
-    - If all rows have identical values AND only count-type columns exist -> filter out
-    - If it's grouped data (count per category) -> keep it (useful aggregation)
-    - If mixed data types -> keep it
+    Two-stage filtering:
+    1. Fast check: Single-column count data → filter out
+    2. Full check: Multiple identical rows with only count columns → filter out
     
     Returns None if data should be filtered out, otherwise returns the data.
     """
     if not data or len(data) == 0:
         return data
     
-    # Check if this looks like redundant count data
+    # Stage 1: Quick single-column count check (fastest)
+    if _is_single_column_count(data):
+        print(f"🚫 Filtering out single-column count data ({len(data)} rows)")
+        return None
+    
+    # Stage 2: Check for redundant multi-row count data
     if _is_redundant_count_data(data):
         print(f"🚫 Filtering out redundant count data ({len(data)} identical rows)")
         return None
     
     return data
+
+
+def _is_single_column_count(data: List[Dict[str, Any]]) -> bool:
+    """
+    Detect if data has only 1 column with a count-related name.
+    
+    Uses regex to match common count patterns: count, total, sum, avg, average, min, max
+    """
+    if len(data) == 0:
+        return False
+    
+    first_row = data[0]
+    
+    # Check if only 1 column exists
+    if len(first_row) != 1:
+        return False  # Multiple columns - keep the data
+    
+    # Get the single column name
+    column_name = list(first_row.keys())[0]
+    
+    # Regex pattern to match count-related column names (case-insensitive)
+    count_pattern = re.compile(r'(count|total)', re.IGNORECASE)
+    
+    # If column name matches count pattern, filter it out
+    if count_pattern.search(column_name):
+        return True
+    
+    return False
 
 
 def _is_redundant_count_data(data: List[Dict[str, Any]]) -> bool:
@@ -391,7 +424,7 @@ def _is_redundant_count_data(data: List[Dict[str, Any]]) -> bool:
     # Early exit: Check if only count-type columns exist (fast check)
     count_columns = [col for col in first_row.keys() 
                     if any(keyword in col.lower() 
-                          for keyword in ['count', 'total', 'sum', 'avg', 'average', 'min', 'max'])]
+                          for keyword in ['count', 'total'])]
     
     if len(count_columns) != len(first_row):
         return False  # Has non-count columns - keep the data
